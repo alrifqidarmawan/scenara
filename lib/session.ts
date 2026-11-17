@@ -2,7 +2,7 @@ import "server-only";
 import { cookies } from "next/headers";
 
 /**
- * Member identity (GEMINI.md §6B). A per-room httpOnly cookie holds the
+ * Member identity (CLAUDE.md §6B). A per-room httpOnly cookie holds the
  * `room_members.id`. It is a cookie rather than localStorage so Server
  * Components can read it and gate spoilers before anything is sent to the browser.
  */

@@ -120,7 +120,7 @@ export function NoteDetail({
       </button>
 
       <header className="flex flex-wrap items-center gap-2">
-        <span className="chip bg-peach/40 text-ink">{note.anchor_label}</span>
+        <span className="chip bg-brand-soft text-brand-ink">{note.anchor_label}</span>
         <span className="chip bg-paper text-muted ring-1 ring-line">{TAG_LABELS[note.tag]}</span>
         <span className="ml-auto text-xs text-muted">{note.author_name}</span>
       </header>
@@ -136,7 +136,7 @@ export function NoteDetail({
               key={i}
               onClick={() => setActiveId(seg.ids[0])}
               className={`cursor-pointer rounded-sm px-0.5 text-ink transition ${
-                seg.ids.includes(activeId ?? "") ? "bg-peach" : "bg-butter hover:bg-peach/60"
+                seg.ids.includes(activeId ?? "") ? "bg-brand-soft text-brand-ink ring-1 ring-brand/40" : "bg-butter hover:bg-brand-soft"
               }`}
             >
               {seg.text}
@@ -146,7 +146,7 @@ export function NoteDetail({
       </p>
 
       {selection ? (
-        <form onSubmit={submit} className="space-y-2 rounded-2xl border border-peach-deep/40 bg-peach/20 p-3">
+        <form onSubmit={submit} className="space-y-2 rounded-2xl border border-brand/40 bg-brand-soft/50 p-3">
           <div className="flex items-start gap-2">
             <Highlighter className="mt-0.5 h-4 w-4 shrink-0 text-ink" aria-hidden="true" />
             <p className="line-clamp-2 flex-1 text-sm text-ink/80">“{selection.text.trim()}”</p>
@@ -196,7 +196,7 @@ export function NoteDetail({
                   type="button"
                   onClick={() => setActiveId(h.id)}
                   className={`w-full rounded-2xl border p-3 text-left transition ${
-                    activeId === h.id ? "border-peach-deep bg-peach/20" : "border-line bg-paper/60 hover:bg-paper"
+                    activeId === h.id ? "border-brand bg-brand-soft/50" : "border-line bg-paper/60 hover:bg-paper"
                   }`}
                 >
                   <p className="line-clamp-2 border-l-2 border-butter-ink/40 pl-2 text-xs text-muted italic">

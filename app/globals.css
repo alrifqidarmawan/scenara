@@ -1,46 +1,122 @@
 @import "tailwindcss";
 
-/* Scenara design system — pastel, warm, minimalist (GEMINI.md §8). Light only. */
-@theme inline {
-  --color-paper: #fbf5ec;
-  --color-cream: #fffdf8;
-  --color-line: #ebdfcf;
-  --color-ink: #4a3a31;
-  --color-muted: #7b6858;
+/* Scenara design system — warm, minimalist, blue-branded (CLAUDE.md §8). Light + dark. */
+@custom-variant dark (&:where(.dark, .dark *));
 
-  --color-peach: #f2b8a0;
-  --color-peach-deep: #e39f84;
-  --color-sage: #d3e0c8;
-  --color-sage-ink: #46613f;
-  --color-lavender: #e1d8f0;
-  --color-lavender-ink: #5a4882;
-  --color-butter: #f8ebbe;
-  --color-butter-ink: #7a5e12;
-  --color-sky: #d0e4ee;
-  --color-sky-ink: #3a6479;
-  --color-blush: #f6d8dc;
-  --color-blush-ink: #8a4455;
-  --color-wood: #ead7bd;
-  --color-wood-deep: #d8bd9a;
-
-  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
-  --font-display: var(--font-fraunces), ui-serif, Georgia, serif;
-  --shadow-soft: 0 1px 2px rgb(120 90 60 / 0.05), 0 8px 24px -12px rgb(120 90 60 / 0.18);
-}
-
+/* Theme values. `.dark` is set on <html> by the inline script in app/layout.tsx. */
 :root {
+  --paper: #fbf5ec;
+  --cream: #fffdf8;
+  --line: #ebdfcf;
+  --ink: #4a3a31;
+  --muted: #7b6858;
+
+  /* Soft, dusty periwinkle: muted on purpose. Buttons use dark navy text, not white. */
+  --brand: #9db4ea;
+  --brand-deep: #8aa3e0;
+  --brand-soft: #e4eaf8;
+  --brand-ink: #3f5393;
+  --brand-text: #4e68bd;
+  --on-brand: #26324f;
+  --brand-glow: #6f8be0;
+
+  --sage: #d3e0c8;
+  --sage-ink: #46613f;
+  --lavender: #e0e3f7;
+  --lavender-ink: #4a4f9a;
+  --butter: #f8ebbe;
+  --butter-ink: #7a5e12;
+  --sky: #d0e4ee;
+  --sky-ink: #3a6479;
+  --blush: #f6d8dc;
+  --blush-ink: #8a4455;
+  --wood: #ead7bd;
+  --wood-deep: #d8bd9a;
+
+  --shadow-color: 120 90 60;
+  --shadow-a: 0.05;
+  --shadow-b: 0.18;
   color-scheme: light;
 }
 
+.dark {
+  --paper: #0f1424;
+  --cream: #171e33;
+  --line: #2a3350;
+  --ink: #eef1fa;
+  --muted: #9aa6c4;
+
+  --brand: #8ea5e0;
+  --brand-deep: #a6b9ec;
+  --brand-soft: #222c4d;
+  --brand-ink: #b4c4f0;
+  --brand-text: #a9bcf0;
+  --on-brand: #0f1424;
+  --brand-glow: #c2cff5;
+
+  --sage: #26382a;
+  --sage-ink: #b5d3aa;
+  --lavender: #272b4e;
+  --lavender-ink: #c0c6f2;
+  --butter: #3b3217;
+  --butter-ink: #e8d28a;
+  --sky: #1d3445;
+  --sky-ink: #a9d3ea;
+  --blush: #43232b;
+  --blush-ink: #f0b3bf;
+  --wood: #5a4630;
+  --wood-deep: #46361f;
+
+  --shadow-color: 0 0 0;
+  --shadow-a: 0.25;
+  --shadow-b: 0.45;
+  color-scheme: dark;
+}
+
+@theme inline {
+  --color-paper: var(--paper);
+  --color-cream: var(--cream);
+  --color-line: var(--line);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+
+  --color-brand: var(--brand);
+  --color-brand-deep: var(--brand-deep);
+  --color-brand-soft: var(--brand-soft);
+  --color-brand-ink: var(--brand-ink);
+  --color-on-brand: var(--on-brand);
+  --color-brand-glow: var(--brand-glow);
+
+  --color-sage: var(--sage);
+  --color-sage-ink: var(--sage-ink);
+  --color-lavender: var(--lavender);
+  --color-lavender-ink: var(--lavender-ink);
+  --color-butter: var(--butter);
+  --color-butter-ink: var(--butter-ink);
+  --color-sky: var(--sky);
+  --color-sky-ink: var(--sky-ink);
+  --color-blush: var(--blush);
+  --color-blush-ink: var(--blush-ink);
+  --color-wood: var(--wood);
+  --color-wood-deep: var(--wood-deep);
+
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-fraunces), ui-serif, Georgia, serif;
+  --shadow-soft:
+    0 1px 2px rgb(var(--shadow-color) / var(--shadow-a)),
+    0 8px 24px -12px rgb(var(--shadow-color) / var(--shadow-b));
+}
+
 body {
-  background: var(--color-paper);
-  color: var(--color-ink);
+  background: var(--paper);
+  color: var(--ink);
   font-family: var(--font-sans);
+  transition: background-color 0.3s ease, color 0.3s ease;
 }
 
 ::selection {
-  background: var(--color-peach);
-  color: var(--color-ink);
+  background: var(--brand-soft);
+  color: var(--brand-ink);
 }
 
 @utility card {
@@ -50,16 +126,16 @@ body {
   @apply rounded-3xl border border-dashed border-line px-6 py-10 text-center text-sm text-muted;
 }
 @utility input {
-  @apply w-full rounded-2xl border border-line bg-cream px-4 py-2.5 text-sm text-ink outline-none transition placeholder:text-muted/70 focus:border-peach-deep focus:ring-4 focus:ring-peach/30;
+  @apply w-full rounded-2xl border border-line bg-cream px-4 py-2.5 text-sm text-ink outline-none transition placeholder:text-muted/70 focus:border-brand focus:ring-4 focus:ring-brand/20;
 }
 @utility btn {
-  @apply inline-flex min-h-10 items-center justify-center gap-2 rounded-full px-5 py-2 text-sm font-medium transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-peach-deep disabled:cursor-not-allowed disabled:opacity-50;
+  @apply inline-flex min-h-10 items-center justify-center gap-2 rounded-full px-5 py-2 text-sm font-medium transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand disabled:cursor-not-allowed disabled:opacity-50;
 }
 @utility btn-primary {
-  @apply btn bg-peach text-ink hover:bg-peach-deep;
+  @apply btn bg-brand text-on-brand shadow-[0_6px_16px_-8px_var(--brand)] hover:bg-brand-deep;
 }
 @utility btn-soft {
-  @apply btn border border-line bg-cream text-ink hover:bg-paper;
+  @apply btn border border-line bg-cream text-ink hover:border-brand/40 hover:bg-brand-soft/60;
 }
 @utility chip {
   @apply inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium;
@@ -68,10 +144,10 @@ body {
   @apply text-xs font-medium tracking-widest text-muted uppercase;
 }
 @utility link {
-  @apply font-medium text-ink underline decoration-peach-deep decoration-2 underline-offset-4 hover:decoration-ink;
+  @apply font-medium text-ink underline decoration-brand decoration-2 underline-offset-4 hover:decoration-ink;
 }
 
-/* Progress range: soft pastel track with a peach fill (--p is set inline, 0-100%). */
+/* Progress range: soft track with a brand fill (--p is set inline, 0-100%). */
 input[type="range"] {
   -webkit-appearance: none;
   appearance: none;
@@ -81,7 +157,7 @@ input[type="range"] {
 input[type="range"]::-webkit-slider-runnable-track {
   height: 8px;
   border-radius: 9999px;
-  background: linear-gradient(to right, var(--color-peach-deep) var(--p, 0%), var(--color-line) var(--p, 0%));
+  background: linear-gradient(to right, var(--brand) var(--p, 0%), var(--line) var(--p, 0%));
 }
 input[type="range"]::-webkit-slider-thumb {
   -webkit-appearance: none;
@@ -89,37 +165,348 @@ input[type="range"]::-webkit-slider-thumb {
   width: 22px;
   margin-top: -7px;
   border-radius: 9999px;
-  background: var(--color-peach-deep);
-  border: 3px solid var(--color-cream);
-  box-shadow: 0 1px 4px rgb(90 60 30 / 0.35);
+  background: var(--brand);
+  border: 3px solid var(--cream);
+  box-shadow: 0 1px 4px rgb(var(--shadow-color) / 0.35);
 }
 input[type="range"]::-moz-range-track {
   height: 8px;
   border-radius: 9999px;
-  background: var(--color-line);
+  background: var(--line);
 }
 input[type="range"]::-moz-range-progress {
   height: 8px;
   border-radius: 9999px;
-  background: var(--color-peach-deep);
+  background: var(--brand);
 }
 input[type="range"]::-moz-range-thumb {
   height: 18px;
   width: 18px;
   border-radius: 9999px;
-  background: var(--color-peach-deep);
-  border: 3px solid var(--color-cream);
-  box-shadow: 0 1px 4px rgb(90 60 30 / 0.35);
+  background: var(--brand);
+  border: 3px solid var(--cream);
+  box-shadow: 0 1px 4px rgb(var(--shadow-color) / 0.35);
 }
 input[type="range"]:focus-visible {
-  outline: 2px solid var(--color-peach-deep);
+  outline: 2px solid var(--brand);
   outline-offset: 4px;
   border-radius: 9999px;
 }
 
+/* ------------------------------------------------------------------ */
+/* Day/night switch (components/theme-toggle.tsx). Illustration colours */
+/* are fixed on purpose: a sun and a moon look the same in both themes. */
+/* ------------------------------------------------------------------ */
+
+@utility sky-day {
+  background: linear-gradient(100deg, var(--brand-soft), var(--butter));
+}
+@utility sky-night {
+  background: linear-gradient(100deg, #10152b, #262f5e);
+}
+@utility sun-orb {
+  background: radial-gradient(circle at 35% 35%, #fff6cf, #ffcb70 58%, #f7a43d);
+  box-shadow: 0 0 10px 2px rgb(255 190 90 / 0.55), 0 0 22px 6px rgb(255 190 90 / 0.25);
+  animation: orb-glow-sun 3.2s ease-in-out infinite alternate;
+}
+@utility moon-orb {
+  background: radial-gradient(circle at 35% 35%, #ffffff, #e2e8ff 58%, #b7c3ef);
+  box-shadow: 0 0 10px 2px rgb(170 190 255 / 0.5), 0 0 22px 6px rgb(150 170 255 / 0.22);
+  animation: orb-glow-moon 3.2s ease-in-out infinite alternate;
+}
+@keyframes orb-glow-sun {
+  to { box-shadow: 0 0 14px 4px rgb(255 190 90 / 0.7), 0 0 30px 10px rgb(255 190 90 / 0.3); }
+}
+@keyframes orb-glow-moon {
+  to { box-shadow: 0 0 14px 4px rgb(170 190 255 / 0.65), 0 0 30px 10px rgb(150 170 255 / 0.28); }
+}
+@keyframes twinkle {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 1; }
+}
+@utility star {
+  animation: twinkle 2.6s ease-in-out infinite;
+}
+.theme-switch:hover .sun-orb,
+.theme-switch:hover .moon-orb {
+  filter: brightness(1.08);
+}
+/* The toggle stays live (and animates) while the page circle-reveals behind it. */
+.theme-switch {
+  view-transition-name: theme-toggle;
+}
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+::view-transition-old(root) {
+  z-index: 1;
+}
+::view-transition-new(root) {
+  z-index: 2;
+}
+::view-transition-group(theme-toggle) {
+  animation: none;
+}
+::view-transition-old(theme-toggle) {
+  display: none;
+}
+::view-transition-new(theme-toggle) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+::view-transition-image-pair(theme-toggle) {
+  isolation: auto;
+}
+
+/* ------------------------------------------------------------------ */
+/* Big sun / moon on the page background (components/sky-body.tsx).     */
+/* Sun: top-left in light mode. Moon: top-right in dark mode.           */
+/* ------------------------------------------------------------------ */
+
+.sky-orb {
+  --size: clamp(150px, 30vmin, 420px);
+  width: var(--size);
+  height: var(--size);
+  left: 5vw;
+  top: 8vh;
+}
+.dark .sky-orb {
+  translate: calc(100vw - var(--size) - 17vw) 0;
+}
+.sky-sun {
+  background: radial-gradient(circle at 36% 34%, #fff6d2, #ffd88e 55%, #ffbd6b);
+  box-shadow: 0 0 40px 8px rgb(255 196 110 / 0.45);
+  opacity: 0.92;
+}
+.sky-halo-sun {
+  background: radial-gradient(circle, rgb(255 200 120 / 0.5), rgb(255 200 120 / 0.18) 40%, transparent 68%);
+  animation: sky-breathe 5s ease-in-out infinite alternate;
+}
+.sky-rays {
+  background: repeating-conic-gradient(rgb(255 205 125 / 0.3) 0 5deg, transparent 5deg 15deg);
+  -webkit-mask-image: radial-gradient(circle, transparent 34%, #000 40%, transparent 68%);
+  mask-image: radial-gradient(circle, transparent 34%, #000 40%, transparent 68%);
+  animation: sky-spin 90s linear infinite;
+}
+.sky-moon {
+  background: radial-gradient(circle at 36% 34%, #ffffff, #e4e9ff 55%, #b5c1ee);
+  box-shadow: 0 0 40px 8px rgb(160 180 255 / 0.4);
+  opacity: 0.95;
+}
+.sky-halo-moon {
+  background: radial-gradient(circle, rgb(165 185 255 / 0.4), rgb(140 160 240 / 0.14) 42%, transparent 68%);
+  animation: sky-breathe 5s ease-in-out infinite alternate;
+}
+@keyframes sky-breathe {
+  to { transform: scale(1.07); opacity: 0.85; }
+}
+@keyframes sky-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ------------------------------------------------------------------ */
+/* Shelves (components/book-shelf.tsx). Two themes + soft night glow.  */
+/* Plant and light colours are fixed illustration colours.              */
+/* ------------------------------------------------------------------ */
+
+.shelf-board {
+  position: relative;
+  margin-top: -2px;
+  height: 0.8rem;
+}
+/* Books: warm wood with faint grain */
+.shelf-board-wood {
+  background:
+    repeating-linear-gradient(90deg, rgb(0 0 0 / 0.035) 0 2px, transparent 2px 11px),
+    linear-gradient(to bottom, var(--wood), var(--wood-deep));
+  box-shadow: 0 3px 6px -3px rgb(0 0 0 / 0.3);
+}
+/* Shows: painted pastel board with a film-strip edge */
+.shelf-board-film {
+  height: 1rem;
+  background: linear-gradient(to bottom, var(--brand-soft), var(--sky));
+  box-shadow: 0 3px 6px -3px rgb(0 0 0 / 0.3);
+}
+.shelf-board-film::after {
+  content: "";
+  position: absolute;
+  inset: 0.32rem 0 auto 0;
+  height: 0.36rem;
+  background: repeating-linear-gradient(90deg, var(--cream) 0 0.45rem, transparent 0.45rem 0.9rem);
+  opacity: 0.8;
+  border-radius: 1px;
+}
+/* Night light: NOT a strip along the board. Each cover gets its own soft glow from
+   underneath it (a pool of light on the board plus a faint halo up the cover). */
+.shelf-light-warm {
+  --lc: 255 206 130;
+}
+.shelf-light-cool {
+  --lc: 176 190 255;
+}
+.cover-glow,
+.cover-halo {
+  position: absolute;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.7s ease;
+}
+.cover-glow {
+  left: 14%;
+  right: 14%;
+  bottom: -8px;
+  height: 20px;
+  z-index: 2;
+  border-radius: 50%;
+  background: radial-gradient(ellipse at center, rgb(var(--lc) / 0.62), rgb(var(--lc) / 0.16) 55%, transparent 74%);
+}
+.cover-halo {
+  left: 2%;
+  right: 2%;
+  bottom: -2px;
+  top: 55%;
+  z-index: 0;
+  background: radial-gradient(ellipse at 50% 100%, rgb(var(--lc) / 0.2), transparent 68%);
+}
+.dark .cover-glow,
+.dark .cover-halo {
+  opacity: 1;
+}
+
+/* Zooming between one shelf and the overview of all shelves */
+@keyframes zoom-in {
+  from { opacity: 0; transform: scale(0.93); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes zoom-out {
+  from { opacity: 0; transform: scale(1.07); }
+  to { opacity: 1; transform: none; }
+}
+@utility zoom-in { animation: zoom-in 0.45s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+@utility zoom-out { animation: zoom-out 0.45s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+
+@keyframes sway {
+  0%, 100% { transform: rotate(-2.5deg); }
+  50% { transform: rotate(2.5deg); }
+}
+@utility sway {
+  animation: sway 5s ease-in-out infinite;
+}
+
+/* The prince on the moon (components/sky-body.tsx) */
+@keyframes scarf-wave {
+  0%, 100% { transform: rotate(-7deg) skewX(-4deg); }
+  50% { transform: rotate(9deg) skewX(5deg); }
+}
+@utility scarf {
+  transform-origin: 20px 30px;
+  animation: scarf-wave 3.2s ease-in-out infinite;
+}
+
+/* ------------------------------------------------------------------ */
+/* Landing page motion (CLAUDE.md §6G). Pure CSS: no JS, no layout shift. */
+/* ------------------------------------------------------------------ */
+
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(18px); }
+  to { opacity: 1; transform: none; }
+}
+@utility reveal {
+  animation: fade-up 0.8s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  animation-delay: var(--d, 0s);
+}
+
+@keyframes drift {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  50% { transform: translate3d(3%, 6%, 0) scale(1.08); }
+}
+@utility aurora {
+  animation: drift 18s ease-in-out infinite;
+}
+
+@keyframes shimmer {
+  to { background-position: 200% center; }
+}
+@utility text-shimmer {
+  background-image: linear-gradient(90deg, var(--brand-text), var(--brand-glow), var(--brand-ink), var(--brand-text));
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: shimmer 7s linear infinite;
+}
+
+@keyframes float-y {
+  0%, 100% { transform: translateY(0) rotate(var(--r, 0deg)); }
+  50% { transform: translateY(-8px) rotate(var(--r, 0deg)); }
+}
+@utility float {
+  animation: float-y 6s ease-in-out infinite;
+  animation-delay: var(--d, 0s);
+}
+
+@keyframes marquee {
+  to { transform: translateX(-50%); }
+}
+@utility marquee {
+  animation: marquee 48s linear infinite;
+}
+
+@keyframes pulse-dot {
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--brand) 55%, transparent); }
+  100% { box-shadow: 0 0 0 10px transparent; }
+}
+@utility pulse-dot {
+  animation: pulse-dot 1.8s ease-out infinite;
+}
+
+/*
+ * "Fog lifting" loop (10s). The reader slides from Ep 2 to Ep 5; entries anchored at
+ * Ep 4 and Ep 5 unlock on the way, a toast appears, then it resets and repeats.
+ */
+@keyframes fog-thumb { 0%, 10% { left: 22%; } 40%, 88% { left: 56%; } 100% { left: 22%; } }
+@keyframes fog-fill { 0%, 10% { width: 22%; } 40%, 88% { width: 56%; } 100% { width: 22%; } }
+/* label follows the slider: Ep 2 -> Ep 4 -> Ep 5 */
+@keyframes fog-label-a { 0%, 22% { opacity: 1; } 26%, 90% { opacity: 0; } 94%, 100% { opacity: 1; } }
+@keyframes fog-label-m { 0%, 24% { opacity: 0; } 28%, 36% { opacity: 1; } 40%, 100% { opacity: 0; } }
+@keyframes fog-label-b { 0%, 36% { opacity: 0; } 40%, 90% { opacity: 1; } 94%, 100% { opacity: 0; } }
+/* an entry that opens at 28% and re-locks at 90% */
+@keyframes fog-locked-1 { 0%, 26% { opacity: 1; } 30%, 88% { opacity: 0; } 92%, 100% { opacity: 1; } }
+@keyframes fog-open-1 { 0%, 26% { opacity: 0; transform: translateY(6px); } 32%, 88% { opacity: 1; transform: none; } 92%, 100% { opacity: 0; transform: translateY(6px); } }
+/* an entry that opens at 40% */
+@keyframes fog-locked-2 { 0%, 38% { opacity: 1; } 42%, 88% { opacity: 0; } 92%, 100% { opacity: 1; } }
+@keyframes fog-open-2 { 0%, 38% { opacity: 0; transform: translateY(6px); } 44%, 88% { opacity: 1; transform: none; } 92%, 100% { opacity: 0; transform: translateY(6px); } }
+@keyframes fog-toast {
+  0%, 38% { opacity: 0; transform: translateY(10px) scale(0.95); }
+  44%, 62% { opacity: 1; transform: none; }
+  68%, 100% { opacity: 0; transform: translateY(-6px) scale(0.98); }
+}
+
+@utility fog-thumb { animation: fog-thumb 10s ease-in-out infinite; }
+@utility fog-fill { animation: fog-fill 10s ease-in-out infinite; }
+@utility fog-label-a { animation: fog-label-a 10s linear infinite; }
+@utility fog-label-m { animation: fog-label-m 10s linear infinite; }
+@utility fog-label-b { animation: fog-label-b 10s linear infinite; }
+@utility fog-locked-1 { animation: fog-locked-1 10s ease-in-out infinite; }
+@utility fog-open-1 { animation: fog-open-1 10s ease-in-out infinite; }
+@utility fog-locked-2 { animation: fog-locked-2 10s ease-in-out infinite; }
+@utility fog-open-2 { animation: fog-open-2 10s ease-in-out infinite; }
+@utility fog-toast { animation: fog-toast 10s ease-in-out infinite; }
+
+/* Reduced motion: no loops. Show the finished state (entries unlocked) and a still page. */
 @media (prefers-reduced-motion: reduce) {
-  * {
+  *, *::before, *::after {
+    animation: none !important;
     transition-duration: 0.01ms !important;
-    animation-duration: 0.01ms !important;
   }
+  .fog-thumb { left: 56%; }
+  .fog-fill { width: 56%; }
+  .fog-label-a, .fog-label-m, .fog-locked-1, .fog-locked-2, .fog-toast { opacity: 0; }
+  .fog-label-b, .fog-open-1, .fog-open-2 { opacity: 1; }
+  .text-shimmer { background-position: 0 center; }
+  .sky-rays { transform: none; }
+  .sway, .scarf { transform: none; }
+  .marquee { transform: none; }
 }

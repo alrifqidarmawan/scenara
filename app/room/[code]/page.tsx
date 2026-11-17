@@ -3,8 +3,12 @@ import { notFound } from "next/navigation";
 import { AddMediaDialog } from "@/components/add-media-dialog";
 import { Brand } from "@/components/brand";
 import { BookShelf } from "@/components/book-shelf";
+import { ShelfBar } from "@/components/shelf-bar";
+import { ShelfOverview } from "@/components/shelf-overview";
+import { ShelfTitle } from "@/components/shelf-title";
 import { CopyLinkButton } from "@/components/copy-link-button";
 import { JoinRoom } from "@/components/join-room";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { MediaModal } from "@/components/media-modal";
 import { SETUP_HINT, isSupabaseConfigured } from "@/lib/supabase-server";
 import {
@@ -19,7 +23,7 @@ import {
 import { formatMediaUnit } from "@/lib/types";
 
 /**
- * Room dashboard (GEMINI.md §7): join prompt, or media list + member progress.
+ * Room dashboard (CLAUDE.md §7): join prompt, or media list + member progress.
  * Request data (params, cookies) is read inside <Suspense> as required by
  * `cacheComponents`.
  */
@@ -36,7 +40,10 @@ function Header({ code }: { code: string }) {
     <header className="border-b border-line bg-cream/70">
       <div className="mx-auto flex max-w-4xl items-center justify-between gap-3 px-4 py-3">
         <Brand />
-        <span className="chip bg-paper font-mono text-muted ring-1 ring-line">{code}</span>
+        <div className="flex items-center gap-2">
+          <span className="chip bg-paper font-mono text-muted ring-1 ring-line">{code}</span>
+          <ThemeToggle />
+        </div>
       </div>
     </header>
   );
@@ -47,10 +54,10 @@ async function RoomContent({
   searchParams,
 }: {
   params: Promise<{ code: string }>;
-  searchParams: Promise<{ media?: string | string[] }>;
+  searchParams: Promise<{ media?: string | string[]; shelf?: string | string[]; view?: string | string[] }>;
 }) {
   const { code } = await params;
-  const { media: mediaParam } = await searchParams;
+  const { media: mediaParam, shelf: shelfParam, view: viewParam } = await searchParams;
 
   if (!isSupabaseConfigured()) {
     return (
@@ -85,13 +92,42 @@ async function RoomContent({
     );
   }
 
-  const { media, members, progress } = await getRoomOverview(room);
+  const { shelves, media, members, progress } = await getRoomOverview(room);
+  if (shelves.length === 0) {
+    // The `shelves` table doesn't exist yet (older database): say how to fix it.
+    return (
+      <>
+        <Header code={code} />
+        <main className="mx-auto w-full max-w-md px-4 py-16 text-center">
+          <h1 className="font-display text-2xl">One database step left</h1>
+          <p className="mt-3 text-sm text-muted">
+            Shelves need a new table. Open the Supabase SQL Editor, run <code>supabase/schema.sql</code>, then reload.
+          </p>
+        </main>
+      </>
+    );
+  }
+
   const nameById = new Map(members.map((m) => [m.id, m.nickname]));
-  const roomPath = `/room/${room.code}`;
+  const base = `/room/${room.code}`;
 
   // `?media=<id>` opens the modal. Locked notes are stripped inside getFeed.
   const openId = typeof mediaParam === "string" && isUuid(mediaParam) ? mediaParam : null;
   const open = openId ? media.find((m) => m.id === openId) : undefined;
+
+  // One shelf is shown at a time: `?shelf=<id>`; a shared media link opens on its own shelf.
+  const wanted = typeof shelfParam === "string" ? shelfParam : undefined;
+  const current =
+    shelves.find((s) => s.id === wanted) ??
+    (open ? shelves.find((s) => s.id === open.shelf_id) : undefined) ??
+    shelves[0];
+  const roomPath = `${base}?shelf=${current.id}`;
+  const overview = viewParam === "all" && shelves.length > 1 && !open;
+
+  const itemsByShelf: Record<string, typeof media> = {};
+  for (const m of media) (itemsByShelf[m.shelf_id ?? ""] ??= []).push(m);
+  const currentItems = itemsByShelf[current.id] ?? [];
+
   let modal: React.ReactNode = null;
   if (open) {
     const myUnit = progress[open.id]?.[member.id] ?? 0;
@@ -102,6 +138,7 @@ async function RoomContent({
         roomCode={room.code}
         roomPath={roomPath}
         media={open}
+        shelves={shelves.filter((sh) => sh.kind === open.media_type).map((sh) => ({ id: sh.id, name: sh.name }))}
         myUnit={myUnit}
         memberName={member.nickname}
         feed={feed}
@@ -122,28 +159,47 @@ async function RoomContent({
           <h1 className="mt-2 font-display text-3xl tracking-tight">{room.name}</h1>
           <div className="mt-5 flex flex-wrap items-start gap-3">
             <CopyLinkButton />
-            <AddMediaDialog roomCode={room.code} />
           </div>
         </section>
 
-        <section>
-          <h2 className="eyebrow">Our shelf</h2>
-          <div className="mt-2">
-            <BookShelf
-              hrefFor={(id) => `${roomPath}?media=${id}`}
-              items={media.map((m) => {
-                const unit = progress[m.id]?.[member.id] ?? 0;
-                return {
-                  media: m,
-                  progressLabel: unit === 0 && m.media_type === "tv" ? "Not started" : formatMediaUnit(m, unit),
-                };
-              })}
-            />
-          </div>
-          {media.length === 0 && (
-            <p className="mt-4 text-center text-sm text-muted">
-              Your shelf is empty. Add a show or a book to get started.
-            </p>
+        <section className="space-y-5">
+          <ShelfBar
+            roomCode={room.code}
+            currentId={current.id}
+            overview={overview}
+            shelves={shelves.map((sh) => ({ id: sh.id, name: sh.name, kind: sh.kind, count: (itemsByShelf[sh.id] ?? []).length }))}
+          />
+
+          {overview ? (
+            <div key="overview" className="zoom-out">
+              <ShelfOverview roomCode={room.code} shelves={shelves} itemsByShelf={itemsByShelf} />
+            </div>
+          ) : (
+            <div key={current.id} className="zoom-in space-y-4">
+              <ShelfTitle
+                roomCode={room.code}
+                shelf={{ id: current.id, name: current.name }}
+                count={currentItems.length}
+                canDelete={shelves.length > 1}
+              />
+              <AddMediaDialog roomCode={room.code} shelf={{ id: current.id, name: current.name, kind: current.kind }} />
+              <BookShelf
+                variant={current.kind}
+                hrefFor={(id) => `${roomPath}&media=${id}`}
+                items={currentItems.map((m) => {
+                  const unit = progress[m.id]?.[member.id] ?? 0;
+                  return {
+                    media: m,
+                    progressLabel: unit === 0 && m.media_type === "tv" ? "Not started" : formatMediaUnit(m, unit),
+                  };
+                })}
+              />
+              {currentItems.length === 0 && (
+                <p className="text-center text-sm text-muted">
+                  This shelf is empty. {current.kind === "book" ? "Add a book" : "Add a show"} to start it.
+                </p>
+              )}
+            </div>
           )}
         </section>
 
@@ -154,7 +210,7 @@ async function RoomContent({
               <li
                 key={m.id}
                 className={`chip px-3.5 py-1.5 text-sm ${
-                  m.id === member.id ? "bg-peach/50 text-ink" : "bg-cream text-muted ring-1 ring-line"
+                  m.id === member.id ? "bg-brand-soft text-brand-ink" : "bg-cream text-muted ring-1 ring-line"
                 }`}
               >
                 {m.nickname}

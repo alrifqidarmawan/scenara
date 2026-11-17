@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import Link from "next/link";
 import { Info } from "lucide-react";
 import { Brand } from "@/components/brand";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { NoteCard } from "@/components/note-card";
 import { PersonaSwitcher } from "@/components/persona-switcher";
 import { ProgressSlider } from "@/components/progress-slider";
@@ -17,7 +18,7 @@ import {
 import { isNoteUnlocked } from "@/lib/types";
 
 /**
- * Interactive demo (GEMINI.md §6C) — zero friction, no Supabase, no login.
+ * Interactive demo (CLAUDE.md §6F) — zero friction, no Supabase, no login.
  * Everything runs client-side so a visitor can slide progress forward and
  * watch notes unlock, from either persona's point of view.
  */
@@ -53,7 +54,7 @@ export default function DemoPage() {
   }
 
   // Show the newest notes first, locked ones included — silence makes rooms
-  // feel dead (GEMINI.md §6A).
+  // feel dead (CLAUDE.md §6A).
   const feed = [...DEMO_NOTES].sort((a, b) => b.anchor_unit - a.anchor_unit);
 
   return (
@@ -61,7 +62,10 @@ export default function DemoPage() {
       <header className="border-b border-line bg-cream/70">
         <div className="mx-auto flex max-w-2xl items-center justify-between gap-3 px-4 py-3">
           <Brand badge="Demo" />
-          <span className="text-xs text-muted">Switch personas below</span>
+          <div className="flex items-center gap-3">
+            <span className="hidden text-xs text-muted sm:inline">Switch personas below</span>
+            <ThemeToggle />
+          </div>
         </div>
       </header>
 
@@ -74,7 +78,7 @@ export default function DemoPage() {
                 {DEMO_MEDIA.subtitle} · {DEMO_MEDIA.totalUnits} episodes
               </p>
             </div>
-            <span className="chip bg-peach/50 px-3 py-1 text-sm text-ink">
+            <span className="chip bg-brand-soft px-3 py-1 text-sm text-brand-ink">
               {activeId.name} · {myUnit === 0 ? "Not started" : `Ep ${myUnit}`}
             </span>
           </div>

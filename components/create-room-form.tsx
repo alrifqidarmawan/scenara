@@ -6,7 +6,7 @@ import { createRoom, type ActionState } from "@/lib/actions";
 
 const initialState: ActionState = {};
 
-/** "Create a Room" CTA from GEMINI.md §6C — a real room row in Supabase. */
+/** "Create a Room" CTA from CLAUDE.md §6F — a real room row in Supabase. */
 export function CreateRoomForm() {
   const [state, formAction, pending] = useActionState(createRoom, initialState);
 
@@ -23,11 +23,11 @@ export function CreateRoomForm() {
         placeholder="e.g. Friday Night Club"
         className="input"
       />
-      <button type="submit" disabled={pending} className="btn-primary w-full">
+      <button type="submit" disabled={pending} className="btn-primary group w-full">
         {pending ? (
           <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
         ) : (
-          <ArrowRight className="h-4 w-4" aria-hidden="true" />
+          <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" aria-hidden="true" />
         )}
         Create room
       </button>

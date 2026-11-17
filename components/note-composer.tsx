@@ -7,7 +7,7 @@ import type { MediaType, NoteTag } from "@/lib/types";
 
 /**
  * Quick note input. The anchor shown here is informational — the server
- * re-derives it from the member's saved progress (GEMINI.md §6A).
+ * re-derives it from the member's saved progress (CLAUDE.md §6A).
  */
 const TAG_OPTIONS: { value: NoteTag; label: string }[] = [
   { value: "note", label: "Note" },
@@ -64,7 +64,7 @@ export function NoteComposer({
         <p className="text-sm text-muted">
           Posting as <span className="font-medium text-ink">{authorName}</span>
         </p>
-        <span className="chip bg-peach/40 text-ink">at {anchorLabel}</span>
+        <span className="chip bg-brand-soft text-brand-ink">at {anchorLabel}</span>
       </div>
 
       <input
@@ -109,8 +109,8 @@ export function NoteComposer({
               aria-pressed={tag === opt.value}
               className={`chip min-h-8 px-3 transition ${
                 tag === opt.value
-                  ? "bg-peach text-ink"
-                  : "bg-paper text-muted ring-1 ring-line hover:bg-peach/30"
+                  ? "bg-brand text-on-brand"
+                  : "bg-paper text-muted ring-1 ring-line hover:bg-brand-soft"
               }`}
             >
               {opt.label}

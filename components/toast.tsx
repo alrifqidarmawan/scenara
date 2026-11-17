@@ -1,4 +1,4 @@
-/** Small floating status pill — used for "Unlocked N new notes!" (GEMINI.md §6A). */
+/** Small floating status pill — used for "Unlocked N new notes!" (CLAUDE.md §6A). */
 export function Toast({ message }: { message: string | null }) {
   if (!message) return null;
   return (

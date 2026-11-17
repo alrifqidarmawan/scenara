@@ -3,10 +3,10 @@ import Link from "next/link";
 /** Wordmark used in every page header. */
 export function Brand({ href = "/", badge }: { href?: string; badge?: string }) {
   return (
-    <Link href={href} className="inline-flex items-center gap-2">
+    <Link href={href} className="group inline-flex items-center gap-2">
       <span
         aria-hidden="true"
-        className="flex h-8 w-8 items-center justify-center rounded-full bg-peach font-display text-lg leading-none"
+        className="flex h-8 w-8 items-center justify-center rounded-full bg-brand font-display text-lg leading-none text-on-brand transition group-hover:rotate-[-8deg] group-hover:scale-105"
       >
         s
       </span>

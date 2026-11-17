@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { getCurrentMember, getMedia, getMyUnit, getRoomByCode, isUuid } from "./data";
+import { getCurrentMember, getMedia, getMyUnit, getRoomByCode, getShelf, isUuid } from "./data";
 import { getBookDetails, getTvDetails } from "./media-api";
 import { writeMemberId } from "./session";
 import { SETUP_HINT, getSupabase, isSupabaseConfigured } from "./supabase-server";
@@ -13,13 +13,15 @@ import { ALLOWED_COVER_HOSTS, formatUnitLabel, isNoteUnlocked, type Note } from 
 export interface ActionState {
   error?: string;
   ok?: boolean;
+  /** Id of the thing just created (e.g. a new shelf), so the UI can go to it. */
+  id?: string;
 }
 
 const DUPLICATE = "23505";
 const NOT_JOINED = "Join the room first.";
 
 // ---------------------------------------------------------------------------
-// Create Room (GEMINI.md §6C)
+// Create Room (CLAUDE.md §6F)
 // ---------------------------------------------------------------------------
 
 const createRoomSchema = z.object({
@@ -71,7 +73,7 @@ export async function createRoom(
 }
 
 // ---------------------------------------------------------------------------
-// Identity (GEMINI.md §6B)
+// Identity (CLAUDE.md §6B)
 // ---------------------------------------------------------------------------
 
 const joinSchema = z.object({
@@ -150,6 +152,7 @@ const addMediaSchema = z.object({
   total_pages: z.number().int().min(1).max(10000).nullable(),
   creator: z.string().trim().max(200).nullable(),
   year: z.number().int().min(1).max(3000).nullable(),
+  shelf_id: z.string().uuid(),
 });
 
 export async function addMedia(
@@ -165,6 +168,7 @@ export async function addMedia(
     total_pages: formData.get("total_pages") ? Number(formData.get("total_pages")) : null,
     creator: String(formData.get("creator") ?? "").trim() || null,
     year: formData.get("year") ? Number(formData.get("year")) : null,
+    shelf_id: formData.get("shelf_id"),
   });
   if (!parsed.success) {
     const pagesBad = parsed.error.issues.some((i) => i.path[0] === "total_pages");
@@ -176,8 +180,14 @@ export async function addMedia(
   if (!room) return { error: "This room no longer exists." };
   if (!(await getCurrentMember(room))) return { error: NOT_JOINED };
 
+  const shelf = await getShelf(room, input.shelf_id);
+  if (!shelf) return { error: "That shelf no longer exists." };
+  if (shelf.kind !== input.media_type) {
+    return { error: `"${shelf.name}" is a ${shelf.kind === "book" ? "book" : "show"} shelf.` };
+  }
+
   // Total units come from the server, never from the form: books are a
-  // percentage, TV asks TMDB once for the episode count (GEMINI.md §4).
+  // percentage, TV asks TMDB once for the episode count (CLAUDE.md §4).
   // Books: pages when the adder knows them, otherwise a 0-100 percentage.
   let totalUnits = 100;
   const totalPages = input.media_type === "book" ? input.total_pages : null;
@@ -200,7 +210,10 @@ export async function addMedia(
     }
     if (totalUnits < 1) return { error: "TMDB has no episode count for this show yet." };
   } else {
-    ({ description, genres } = await getBookDetails(input.external_id));
+    const book = await getBookDetails(input.external_id);
+    ({ description, genres } = book);
+    creator = creator ?? book.creator;
+    year = year ?? book.year;
   }
 
   const { error } = await getSupabase().from("room_media").insert({
@@ -215,6 +228,7 @@ export async function addMedia(
     year,
     description,
     genres,
+    shelf_id: shelf.id,
   });
   if (error?.code === DUPLICATE) return { error: "That one is already in this room." };
   if (error) return { error: error.message };
@@ -283,7 +297,7 @@ export async function updateProgress(
 }
 
 // ---------------------------------------------------------------------------
-// Notes (GEMINI.md §6A) — anchor and author are derived server-side
+// Notes (CLAUDE.md §6A) — anchor and author are derived server-side
 // ---------------------------------------------------------------------------
 
 const noteSchema = z.object({
@@ -477,6 +491,7 @@ const manualSchema = z.object({
   description: z.string().trim().max(2000, "Keep the description under 2000 characters.").optional(),
   pages: optionalInt(1, 10000),
   episodes: optionalInt(1, 5000),
+  shelf_id: z.string().uuid(),
 });
 
 export async function addManualMedia(
@@ -495,6 +510,12 @@ export async function addManualMedia(
   const room = await getRoomByCode(input.room_code);
   if (!room) return { error: "This room no longer exists." };
   if (!(await getCurrentMember(room))) return { error: NOT_JOINED };
+
+  const shelf = await getShelf(room, input.shelf_id);
+  if (!shelf) return { error: "That shelf no longer exists." };
+  if (shelf.kind !== input.media_type) {
+    return { error: `"${shelf.name}" is a ${shelf.kind === "book" ? "book" : "show"} shelf.` };
+  }
 
   const supabase = getSupabase();
 
@@ -532,9 +553,114 @@ export async function addManualMedia(
     year: input.year ?? null,
     genres: input.genres || null,
     description: input.description || null,
+    shelf_id: shelf.id,
   });
   if (error) return { error: error.message };
 
   revalidatePath(`/room/${room.code}`);
+  return { ok: true };
+}
+
+// ---------------------------------------------------------------------------
+// Shelves — named by members. A shelf holds one kind of media (that sets its theme).
+// ---------------------------------------------------------------------------
+
+const shelfNameSchema = z
+  .string()
+  .trim()
+  .min(1, "Give the shelf a name.")
+  .max(40, "Keep the name under 40 characters.");
+
+async function requireMemberInRoom(roomCode: string) {
+  const room = await getRoomByCode(roomCode);
+  const member = room && (await getCurrentMember(room));
+  return room && member ? room : null;
+}
+
+export async function createShelf(
+  roomCode: string,
+  name: string,
+  kind: "book" | "tv",
+): Promise<ActionState> {
+  const parsedName = shelfNameSchema.safeParse(name);
+  if (!parsedName.success) return { error: parsedName.error.issues[0]?.message ?? "Invalid name." };
+  if (kind !== "book" && kind !== "tv") return { error: "Pick books or shows." };
+
+  const room = await requireMemberInRoom(roomCode);
+  if (!room) return { error: NOT_JOINED };
+
+  const supabase = getSupabase();
+  const { data: last } = await supabase
+    .from("shelves")
+    .select("position")
+    .eq("room_id", room.id)
+    .order("position", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const { data, error } = await supabase
+    .from("shelves")
+    .insert({ room_id: room.id, name: parsedName.data, kind, position: ((last as { position: number } | null)?.position ?? -1) + 1 })
+    .select("id")
+    .single();
+  if (error?.code === DUPLICATE) return { error: "You already have a shelf with that name." };
+  if (error || !data) return { error: error?.message ?? "Could not create the shelf." };
+
+  revalidatePath(`/room/${room.code}`, "layout");
+  return { ok: true, id: data.id };
+}
+
+export async function renameShelf(roomCode: string, shelfId: string, name: string): Promise<ActionState> {
+  const parsedName = shelfNameSchema.safeParse(name);
+  if (!parsedName.success) return { error: parsedName.error.issues[0]?.message ?? "Invalid name." };
+
+  const room = await requireMemberInRoom(roomCode);
+  if (!room) return { error: NOT_JOINED };
+  const shelf = await getShelf(room, shelfId);
+  if (!shelf) return { error: "Shelf not found." };
+
+  const { error } = await getSupabase().from("shelves").update({ name: parsedName.data }).eq("id", shelf.id);
+  if (error?.code === DUPLICATE) return { error: "You already have a shelf with that name." };
+  if (error) return { error: error.message };
+
+  revalidatePath(`/room/${room.code}`, "layout");
+  return { ok: true };
+}
+
+/** Only an empty shelf can be removed, and a room always keeps at least one shelf. */
+export async function deleteShelf(roomCode: string, shelfId: string): Promise<ActionState> {
+  const room = await requireMemberInRoom(roomCode);
+  if (!room) return { error: NOT_JOINED };
+  const shelf = await getShelf(room, shelfId);
+  if (!shelf) return { error: "Shelf not found." };
+
+  const supabase = getSupabase();
+  const [{ count: items }, { count: shelves }] = await Promise.all([
+    supabase.from("room_media").select("id", { count: "exact", head: true }).eq("shelf_id", shelf.id),
+    supabase.from("shelves").select("id", { count: "exact", head: true }).eq("room_id", room.id),
+  ]);
+  if ((items ?? 0) > 0) return { error: "Move its books and shows to another shelf first." };
+  if ((shelves ?? 0) <= 1) return { error: "A room needs at least one shelf." };
+
+  const { error } = await supabase.from("shelves").delete().eq("id", shelf.id);
+  if (error) return { error: error.message };
+
+  revalidatePath(`/room/${room.code}`, "layout");
+  return { ok: true };
+}
+
+/** Move an item to another shelf of the same kind. */
+export async function moveMedia(roomCode: string, mediaId: string, shelfId: string): Promise<ActionState> {
+  const room = await requireMemberInRoom(roomCode);
+  if (!room) return { error: NOT_JOINED };
+  const media = await getMedia(room, mediaId);
+  const shelf = await getShelf(room, shelfId);
+  if (!media || !shelf) return { error: "Not found." };
+  if (shelf.kind !== media.media_type) return { error: "That shelf is for a different kind of media." };
+
+  const { error } = await getSupabase().from("room_media").update({ shelf_id: shelf.id }).eq("id", media.id);
+  if (error) return { error: error.message };
+
+  revalidatePath(`/room/${room.code}`, "layout");
   return { ok: true };
 }

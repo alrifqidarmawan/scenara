@@ -28,9 +28,12 @@ export function ShelfBook({
       href={href}
       scroll={false}
       aria-label={`Open ${title}`}
-      className="group block rounded-lg px-3 pt-5 outline-none"
+      className="group relative block rounded-lg px-3 pt-5 outline-none"
     >
-      <div className="[perspective:1100px]">
+      {/* Night only: a soft pool of light under this cover (see globals.css) */}
+      <span aria-hidden="true" className="cover-halo" />
+      <span aria-hidden="true" className="cover-glow" />
+      <div className="relative [perspective:1100px]">
         <div
           className={`relative aspect-[2/3] transition-transform duration-500 ease-out [transform-style:preserve-3d] ${
             isBook
@@ -41,14 +44,14 @@ export function ShelfBook({
           {isBook && (
             <div
               aria-hidden="true"
-              className="absolute inset-y-[2%] right-[-3%] left-[4%] flex items-center justify-center rounded-r-md bg-cream shadow-[2px_0_0_#f1e7d8,4px_0_0_#e6d9c6]"
+              className="absolute inset-y-[2%] right-[-3%] left-[4%] flex items-center justify-center rounded-r-md bg-cream shadow-[2px_0_0_var(--line),4px_0_0_var(--wood)]"
             >
               <span className="font-display text-lg text-muted">{progressLabel}</span>
             </div>
           )}
 
           <div
-            className={`absolute inset-0 overflow-hidden rounded-r-lg rounded-l-sm shadow-[0_6px_14px_-6px_rgb(90_60_30/0.45)] transition-transform duration-500 ease-out ${
+            className={`absolute inset-0 overflow-hidden rounded-r-lg rounded-l-sm shadow-[0_6px_14px_-6px_rgb(0_0_0/0.4)] transition-transform duration-500 ease-out ${
               isBook
                 ? "origin-left group-hover:[transform:rotateY(-58deg)] group-focus-visible:[transform:rotateY(-58deg)]"
                 : ""

@@ -21,7 +21,7 @@ export function MediaInfo({ media }: { media: RoomMedia }) {
       {media.genres && (
         <ul className="flex flex-wrap gap-1">
           {media.genres.split(",").map((g) => (
-            <li key={g} className="chip bg-lavender text-lavender-ink">
+            <li key={g} className="chip bg-brand-soft text-brand-ink">
               {g.trim()}
             </li>
           ))}

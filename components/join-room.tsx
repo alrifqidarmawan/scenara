@@ -6,7 +6,7 @@ import { claimMember, joinRoom, type ActionState } from "@/lib/actions";
 
 const initialState: ActionState = {};
 
-/** Frictionless identity (GEMINI.md §6B): pick a nickname, or reclaim an existing one. */
+/** Frictionless identity (CLAUDE.md §6B): pick a nickname, or reclaim an existing one. */
 export function JoinRoom({
   roomCode,
   members,

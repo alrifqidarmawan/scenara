@@ -11,6 +11,7 @@ import {
   type Room,
   type RoomMedia,
   type RoomMember,
+  type Shelf,
 } from "./types";
 
 /** Server-only reads. Every function here assumes it runs on the server. */
@@ -47,6 +48,7 @@ export async function getCurrentMember(room: Room): Promise<RoomMember | null> {
 }
 
 export interface RoomOverview {
+  shelves: Shelf[];
   media: RoomMedia[];
   members: RoomMember[];
   /** media_id -> (member_id -> current_unit) */
@@ -59,7 +61,8 @@ export async function getRoomOverview(room: Room): Promise<RoomOverview> {
     supabase.from("room_media").select().eq("room_id", room.id).order("created_at"),
     getMembers(room.id),
   ]);
-  const media = (mediaRes.data as RoomMedia[]) ?? [];
+  const rawMedia = (mediaRes.data as RoomMedia[]) ?? [];
+  const { shelves, media } = await ensureShelves(room, rawMedia);
 
   const progress: RoomOverview["progress"] = {};
   if (media.length > 0) {
@@ -71,7 +74,7 @@ export async function getRoomOverview(room: Room): Promise<RoomOverview> {
       (progress[row.media_id] ??= {})[row.member_id] = row.current_unit;
     }
   }
-  return { media, members, progress };
+  return { shelves, media, members, progress };
 }
 
 export async function getMedia(room: Room, mediaId: string): Promise<RoomMedia | null> {
@@ -136,4 +139,86 @@ export async function getHighlights(unlockedNoteIds: string[]): Promise<Highligh
     .in("note_id", unlockedNoteIds)
     .order("start_offset");
   return (data as Highlight[]) ?? [];
+}
+
+const DEFAULT_SHELF_NAME = { book: "Books", tv: "Shows" } as const;
+
+export async function getShelf(room: Room, shelfId: string): Promise<Shelf | null> {
+  if (!isUuid(shelfId)) return null;
+  const { data } = await getSupabase()
+    .from("shelves")
+    .select()
+    .eq("id", shelfId)
+    .eq("room_id", room.id)
+    .maybeSingle();
+  return (data as Shelf | null) ?? null;
+}
+
+async function listShelves(roomId: string): Promise<Shelf[]> {
+  const { data } = await getSupabase()
+    .from("shelves")
+    .select()
+    .eq("room_id", roomId)
+    .order("position")
+    .order("created_at");
+  return (data as Shelf[]) ?? [];
+}
+
+/**
+ * Inserts a shelf, treating "name already taken" as success: when two requests load a
+ * brand-new room at the same moment, both try to create the defaults and the unique
+ * index makes the loser a harmless no-op.
+ */
+async function insertShelfIgnoringDuplicate(room: Room, name: string, kind: "book" | "tv", position: number) {
+  await getSupabase().from("shelves").insert({ room_id: room.id, name, kind, position });
+}
+
+/**
+ * Makes sure the room has shelves and that every item stands on one. Runs lazily on
+ * room load: new rooms get "Books" and "Shows", and media added before shelves existed
+ * is moved onto the first shelf of its kind. A no-op once everything is in place.
+ * Safe under concurrent loads: it never creates a shelf without re-reading first.
+ */
+async function ensureShelves(
+  room: Room,
+  media: RoomMedia[],
+): Promise<{ shelves: Shelf[]; media: RoomMedia[] }> {
+  const supabase = getSupabase();
+  let shelves = await listShelves(room.id);
+
+  if (shelves.length === 0) {
+    await insertShelfIgnoringDuplicate(room, DEFAULT_SHELF_NAME.book, "book", 0);
+    await insertShelfIgnoringDuplicate(room, DEFAULT_SHELF_NAME.tv, "tv", 1);
+    shelves = await listShelves(room.id);
+  }
+
+  const orphans = media.filter((m) => !m.shelf_id || !shelves.some((s) => s.id === m.shelf_id));
+  if (orphans.length === 0) return { shelves, media };
+
+  const assigned = new Map<string, string>();
+  for (const kind of ["book", "tv"] as const) {
+    const items = orphans.filter((m) => m.media_type === kind);
+    if (items.length === 0) continue;
+
+    let target = shelves.find((s) => s.kind === kind);
+    if (!target) {
+      // Re-read first (another request may just have created it), then create one.
+      shelves = await listShelves(room.id);
+      target = shelves.find((s) => s.kind === kind);
+    }
+    for (let n = 1; !target && n <= 3; n++) {
+      await insertShelfIgnoringDuplicate(room, n === 1 ? DEFAULT_SHELF_NAME[kind] : `${DEFAULT_SHELF_NAME[kind]} ${n}`, kind, shelves.length);
+      shelves = await listShelves(room.id);
+      target = shelves.find((s) => s.kind === kind);
+    }
+    if (!target) continue;
+
+    await supabase.from("room_media").update({ shelf_id: target.id }).in("id", items.map((m) => m.id));
+    for (const m of items) assigned.set(m.id, target.id);
+  }
+
+  return {
+    shelves,
+    media: media.map((m) => (assigned.has(m.id) ? { ...m, shelf_id: assigned.get(m.id) as string } : m)),
+  };
 }

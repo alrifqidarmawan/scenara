@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { moveMedia } from "@/lib/actions";
 import { Lock, PenLine, X } from "lucide-react";
 import { CoverInfo } from "./cover-info";
 import { MediaInfo, hasInfo } from "./media-info";
@@ -25,13 +26,14 @@ const TAG_STYLES: Record<FeedNote["tag"], string> = {
 
 /**
  * Media detail modal: cover + progress on the left, entries on the right
- * (GEMINI.md §6). It is rendered from `/room/[code]?media=<id>`, so the
+ * (CLAUDE.md §6). It is rendered from `/room/[code]?media=<id>`, so the
  * server already stripped locked entries' text before this component sees them.
  */
 export function MediaModal({
   roomCode,
   roomPath,
   media,
+  shelves,
   myUnit,
   memberName,
   others,
@@ -41,6 +43,8 @@ export function MediaModal({
   roomCode: string;
   roomPath: string;
   media: RoomMedia;
+  /** Shelves of this item's kind (where it can be moved). */
+  shelves: { id: string; name: string }[];
   myUnit: number;
   memberName: string;
   others: { name: string; unit: number }[];
@@ -51,6 +55,14 @@ export function MediaModal({
   const closeRef = useRef<HTMLButtonElement>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [writing, setWriting] = useState(false);
+  const [moveError, setMoveError] = useState<string | null>(null);
+
+  async function move(shelfId: string) {
+    setMoveError(null);
+    const result = await moveMedia(roomCode, media.id, shelfId);
+    if (result.error) return setMoveError(result.error);
+    router.push(`/room/${roomCode}?shelf=${shelfId}&media=${media.id}`, { scroll: false });
+  }
 
   const close = () => router.push(roomPath, { scroll: false });
 
@@ -76,7 +88,7 @@ export function MediaModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-ink/30 backdrop-blur-sm sm:items-center sm:p-6"
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/45 backdrop-blur-sm sm:items-center sm:p-6"
       onClick={close}
     >
       <div
@@ -136,6 +148,24 @@ export function MediaModal({
             <div className="rounded-2xl border border-line bg-cream p-4">
               <BookPages roomCode={roomCode} mediaId={media.id} totalPages={media.total_pages} />
             </div>
+          )}
+
+          {shelves.length > 1 && (
+            <label className="block">
+              <span className="eyebrow">On shelf</span>
+              <select
+                value={media.shelf_id ?? ""}
+                onChange={(e) => move(e.target.value)}
+                className="input mt-2 py-2"
+              >
+                {shelves.map((sh) => (
+                  <option key={sh.id} value={sh.id}>
+                    {sh.name}
+                  </option>
+                ))}
+              </select>
+              {moveError && <span role="alert" className="mt-1 block text-xs text-blush-ink">{moveError}</span>}
+            </label>
           )}
 
           {others.length > 0 && (
@@ -207,7 +237,7 @@ export function MediaModal({
                               {n.title ?? n.anchor_label}
                             </span>
                             <span className="mt-1.5 flex flex-wrap items-center gap-2">
-                              <span className="chip bg-peach/40 text-ink">{n.anchor_label}</span>
+                              <span className="chip bg-brand-soft text-brand-ink">{n.anchor_label}</span>
                               <span className={`chip ${TAG_STYLES[n.tag]}`}>{n.tag}</span>
                               {count > 0 && <span className="text-xs text-muted">{count} highlight{count === 1 ? "" : "s"}</span>}
                               <span className="ml-auto text-xs text-muted">{n.author_name}</span>

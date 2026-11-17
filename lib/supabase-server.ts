@@ -1,7 +1,7 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 /**
- * Server-only Supabase client (GEMINI.md §4).
+ * Server-only Supabase client (CLAUDE.md §4).
  *
  * NEVER import this from a client component — it holds the service role key,
  * which bypasses all row-level security. All reads/writes happen in Server
