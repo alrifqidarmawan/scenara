@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { BookOpen, Loader2, Plus, Search, Tv, X } from "lucide-react";
+import { Loader2, Plus, Search, X } from "lucide-react";
 import { addMedia, type ActionState } from "@/lib/actions";
 import type { MediaSearchResult, MediaType } from "@/lib/types";
 import { Cover } from "./cover";
@@ -15,14 +15,22 @@ import { ManualMediaForm } from "./manual-media-form";
 
 const initialState: ActionState = {};
 
-export function AddMediaDialog({ roomCode }: { roomCode: string }) {
+export function AddMediaDialog({
+  roomCode,
+  shelf,
+}: {
+  roomCode: string;
+  /** The shelf being added to. Its kind decides what can be searched (books or shows). */
+  shelf: { id: string; name: string; kind: MediaType };
+}) {
   const [open, setOpen] = useState(false);
   const [manual, setManual] = useState(false);
-  const [mediaType, setMediaType] = useState<MediaType>("tv");
+  const mediaType = shelf.kind;
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<MediaSearchResult[]>([]);
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [state, setState] = useState<ActionState>(initialState);
   const [pending, setPending] = useState(false);
 
@@ -49,11 +57,23 @@ export function AddMediaDialog({ roomCode }: { roomCode: string }) {
 
     setSearching(true);
     setSearchError(null);
+    setNotice(null);
     try {
       const res = await fetch(`/api/search?type=${mediaType}&q=${encodeURIComponent(q)}`);
-      const data = (await res.json()) as { results?: MediaSearchResult[]; error?: string };
+      const data = (await res.json()) as {
+        results?: MediaSearchResult[];
+        error?: string;
+        status?: Record<"openlibrary" | "google", "ok" | "failed" | "skipped">;
+      };
       if (!res.ok) throw new Error(data.error ?? "Search failed.");
       setResults(data.results ?? []);
+      setNotice(
+        data.status?.openlibrary === "failed"
+          ? "Open Library is slow or down, so these come from Google Books only."
+          : data.status?.google === "failed"
+            ? "Google Books didn't answer, so these come from Open Library only."
+            : null,
+      );
       if ((data.results ?? []).length === 0) setSearchError("No matches found.");
     } catch (err) {
       setResults([]);
@@ -67,7 +87,7 @@ export function AddMediaDialog({ roomCode }: { roomCode: string }) {
     return (
       <button type="button" onClick={() => setOpen(true)} className="btn-primary">
         <Plus className="h-4 w-4" aria-hidden="true" />
-        Add a show or book
+        {shelf.kind === "book" ? "Add a book" : "Add a show"}
       </button>
     );
   }
@@ -106,46 +126,15 @@ export function AddMediaDialog({ roomCode }: { roomCode: string }) {
       </div>
 
       {manual ? (
-        <ManualMediaForm roomCode={roomCode} onDone={() => setOpen(false)} />
+        <ManualMediaForm roomCode={roomCode} shelf={shelf} onDone={() => setOpen(false)} />
       ) : (
         <>
-      <div className="flex items-center justify-between gap-2">
-        {/* Medium toggle — v1 supports only tv + book (GEMINI.md §2) */}
-        <div className="flex gap-2">
-          {(
-            [
-              { value: "tv", label: "TV series", icon: Tv },
-              { value: "book", label: "Book", icon: BookOpen },
-            ] as const
-          ).map((opt) => (
-            <button
-              key={opt.value}
-              type="button"
-              onClick={() => {
-                setMediaType(opt.value);
-                setResults([]);
-                setSearchError(null);
-              }}
-              aria-pressed={mediaType === opt.value}
-              className={`chip min-h-9 gap-1.5 px-3.5 text-sm transition ${
-                mediaType === opt.value
-                  ? "bg-peach text-ink"
-                  : "bg-paper text-muted ring-1 ring-line hover:bg-peach/30"
-              }`}
-            >
-              <opt.icon className="h-4 w-4" aria-hidden="true" />
-              {opt.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
       <form onSubmit={runSearch} className="flex gap-2">
         <input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           aria-label="Search"
-          placeholder={mediaType === "tv" ? "Search TV series…" : "Search books…"}
+          placeholder={mediaType === "tv" ? `Search shows for “${shelf.name}”…` : `Search books for “${shelf.name}”…`}
           className="input"
           autoFocus
         />
@@ -159,6 +148,10 @@ export function AddMediaDialog({ roomCode }: { roomCode: string }) {
         </button>
       </form>
 
+      {mediaType === "book" && !searchError && (
+        <p className="text-xs text-muted">Searches Google Books and Open Library together.</p>
+      )}
+      {notice && <p className="text-xs text-butter-ink">{notice}</p>}
       {searchError && <p className="text-sm text-butter-ink">{searchError}</p>}
       {state?.error && (
         <p role="alert" className="rounded-2xl bg-blush px-4 py-2 text-sm text-blush-ink">
@@ -176,10 +169,16 @@ export function AddMediaDialog({ roomCode }: { roomCode: string }) {
               <Cover url={item.coverUrl} title={item.title} mediaType={item.mediaType} />
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-medium">{item.title}</p>
-                <p className="truncate text-xs text-muted">{item.subtitle ?? "Unknown"}</p>
+                <p className="truncate text-xs text-muted">
+                  {item.subtitle ?? "Unknown"}
+                  {item.year ? ` · ${item.year}` : ""}
+                  {item.totalPages ? ` · ${item.totalPages}p` : ""}
+                  {item.sources?.length === 2 ? " · ✓ both sources" : ""}
+                </p>
               </div>
               <form action={formAction}>
                 <input type="hidden" name="room_code" value={roomCode} />
+                <input type="hidden" name="shelf_id" value={shelf.id} />
                 <input type="hidden" name="media_type" value={item.mediaType} />
                 <input type="hidden" name="external_id" value={item.externalId} />
                 <input type="hidden" name="title" value={item.title} />

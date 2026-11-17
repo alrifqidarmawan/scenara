@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { BookOpen, ImagePlus, Loader2, Tv } from "lucide-react";
+import { ImagePlus, Loader2 } from "lucide-react";
 import { addManualMedia, type ActionState } from "@/lib/actions";
 import type { MediaType } from "@/lib/types";
 
@@ -21,8 +21,16 @@ async function shrinkImage(file: File): Promise<File> {
 }
 
 /** Add a book or show by hand, with an optional cover upload. */
-export function ManualMediaForm({ roomCode, onDone }: { roomCode: string; onDone: () => void }) {
-  const [mediaType, setMediaType] = useState<MediaType>("book");
+export function ManualMediaForm({
+  roomCode,
+  shelf,
+  onDone,
+}: {
+  roomCode: string;
+  shelf: { id: string; kind: MediaType };
+  onDone: () => void;
+}) {
+  const mediaType = shelf.kind;
   const [cover, setCover] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [state, setState] = useState<ActionState>({});
@@ -47,6 +55,7 @@ export function ManualMediaForm({ roomCode, onDone }: { roomCode: string; onDone
   async function submit(formData: FormData) {
     formData.set("room_code", roomCode);
     formData.set("media_type", mediaType);
+    formData.set("shelf_id", shelf.id);
     formData.delete("cover");
     if (cover) formData.set("cover", cover);
     setPending(true);
@@ -58,30 +67,8 @@ export function ManualMediaForm({ roomCode, onDone }: { roomCode: string; onDone
 
   return (
     <form action={submit} className="space-y-3">
-      <div className="flex gap-2">
-        {(
-          [
-            { value: "book", label: "Book", icon: BookOpen },
-            { value: "tv", label: "TV series", icon: Tv },
-          ] as const
-        ).map((opt) => (
-          <button
-            key={opt.value}
-            type="button"
-            aria-pressed={mediaType === opt.value}
-            onClick={() => setMediaType(opt.value)}
-            className={`chip min-h-8 gap-1.5 px-3 transition ${
-              mediaType === opt.value ? "bg-lavender text-lavender-ink" : "bg-paper text-muted ring-1 ring-line"
-            }`}
-          >
-            <opt.icon className="h-3.5 w-3.5" aria-hidden="true" />
-            {opt.label}
-          </button>
-        ))}
-      </div>
-
       <div className="flex gap-4">
-        <label className="flex aspect-[2/3] w-28 shrink-0 cursor-pointer flex-col items-center justify-center gap-1 overflow-hidden rounded-2xl border border-dashed border-line bg-paper text-center text-xs text-muted transition hover:bg-peach/20">
+        <label className="flex aspect-[2/3] w-28 shrink-0 cursor-pointer flex-col items-center justify-center gap-1 overflow-hidden rounded-2xl border border-dashed border-line bg-paper text-center text-xs text-muted transition hover:bg-brand-soft/50">
           {preview ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={preview} alt="Cover preview" className="h-full w-full object-cover" />

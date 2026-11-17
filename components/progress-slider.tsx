@@ -5,7 +5,7 @@ import { Minus, Plus } from "lucide-react";
 import { formatUnitLabel, type MediaType } from "@/lib/types";
 
 /**
- * Progress control (GEMINI.md §2 "Progress Units").
+ * Progress control (CLAUDE.md §2 "Progress Units").
  * - TV:    episode stepper, integer 0..total_units (0 = not started)
  * - Books: page slider + exact page input when the page count is known,
  *          otherwise a 0..100 percentage
@@ -134,7 +134,7 @@ function StepButton({
       onClick={onClick}
       disabled={disabled}
       aria-label={label}
-      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-line bg-cream text-ink transition hover:bg-peach/40 focus-visible:outline-2 focus-visible:outline-peach-deep disabled:cursor-not-allowed disabled:opacity-40"
+      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-line bg-cream text-ink transition hover:bg-brand-soft focus-visible:outline-2 focus-visible:outline-brand disabled:cursor-not-allowed disabled:opacity-40"
     >
       {children}
     </button>

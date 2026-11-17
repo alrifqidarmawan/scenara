@@ -1,7 +1,7 @@
 import type { NoteCardData } from "./types";
 
 /**
- * Seed data for the interactive demo (GEMINI.md §6C).
+ * Seed data for the interactive demo (CLAUDE.md §6F).
  * The demo runs entirely client-side so visitors can test the Fog of War
  * spoiler UX with zero setup — no Supabase rows required.
  */

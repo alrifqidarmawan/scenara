@@ -22,7 +22,7 @@ export function Cover({
     const Icon = mediaType === "book" ? BookOpen : Tv;
     return (
       <div
-        className={`flex shrink-0 items-center justify-center rounded-xl bg-lavender text-lavender-ink ${className}`}
+        className={`flex shrink-0 items-center justify-center rounded-xl bg-brand-soft text-brand-ink ${className}`}
       >
         <Icon className="h-5 w-5" aria-hidden="true" />
       </div>

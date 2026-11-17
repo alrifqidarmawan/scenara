@@ -1,4 +1,4 @@
--- Scenara — MVP v1.3 schema (GEMINI.md §5): 6 tables + a public `covers` storage bucket.
+-- Scenara — MVP v1.4 schema (CLAUDE.md §5): 7 tables + a public `covers` storage bucket.
 -- Run in the Supabase SQL Editor (Dashboard → SQL → New query).
 -- Idempotent: safe to re-run. Tables use `if not exists`; indexes use `if not exists`;
 -- enabling RLS twice is a no-op.
@@ -19,6 +19,17 @@ create table if not exists room_members (
   created_at timestamptz default now()
 );
 
+-- 3a. Shelves: named by the room's members. Each shelf holds ONE kind of media, and the
+--     kind decides its theme (book = wooden shelf, tv = painted film-strip shelf).
+create table if not exists shelves (
+  id uuid primary key default gen_random_uuid(),
+  room_id uuid not null references rooms(id) on delete cascade,
+  name text not null check (char_length(name) between 1 and 40),
+  kind text not null check (kind in ('book', 'tv')),
+  position int not null default 0,
+  created_at timestamptz default now()
+);
+
 -- 3. Media inside a Room
 create table if not exists room_media (
   id uuid primary key default gen_random_uuid(),
@@ -33,6 +44,7 @@ create table if not exists room_media (
   description text check (description is null or char_length(description) <= 2000),
   year int check (year is null or year between 1 and 3000),                  -- first published / first aired
   genres text check (genres is null or char_length(genres) <= 200),          -- comma separated
+  shelf_id uuid references shelves(id) on delete set null,                   -- which shelf it stands on
   created_at timestamptz default now()
 );
 
@@ -83,6 +95,8 @@ alter table room_media add column if not exists creator text check (creator is n
 alter table room_media add column if not exists description text check (description is null or char_length(description) <= 2000);
 alter table room_media add column if not exists year int check (year is null or year between 1 and 3000);
 alter table room_media add column if not exists genres text check (genres is null or char_length(genres) <= 200);
+
+alter table room_media add column if not exists shelf_id uuid references shelves(id) on delete set null;
 
 -- Set or change a book's total pages. Atomically rescales every member's progress and
 -- every note anchor (percent -> pages, or old pages -> new pages), so nothing drifts.
@@ -135,6 +149,9 @@ create unique index if not exists room_members_nickname_uniq
 create unique index if not exists room_media_unique_per_room
   on room_media (room_id, media_type, external_id);
 create index if not exists room_media_room_idx on room_media (room_id);
+create unique index if not exists shelves_name_uniq on shelves (room_id, lower(name));
+create index if not exists shelves_room_idx on shelves (room_id, position);
+create index if not exists room_media_shelf_idx on room_media (shelf_id);
 create index if not exists member_progress_media_idx on member_progress (media_id);
 create index if not exists notes_media_anchor_idx on notes (media_id, anchor_unit desc);
 create index if not exists note_highlights_note_idx on note_highlights (note_id);
@@ -147,6 +164,7 @@ alter table rooms           enable row level security;
 alter table room_members    enable row level security;
 alter table room_media      enable row level security;
 alter table member_progress enable row level security;
+alter table shelves         enable row level security;
 alter table notes           enable row level security;
 alter table note_highlights enable row level security;
 

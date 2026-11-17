@@ -1,6 +1,6 @@
 /**
  * Shared TypeScript interfaces for Scenara.
- * Each interface mirrors one table from `supabase/schema.sql` (see GEMINI.md §5).
+ * Each interface mirrors one table from `supabase/schema.sql` (see CLAUDE.md §5).
  * Keep this file the single source of truth for shapes crossing the server/client boundary.
  */
 
@@ -26,6 +26,16 @@ export interface RoomMember {
   created_at: string;
 }
 
+/** shelves — named by members; one kind of media per shelf; the kind sets the theme. */
+export interface Shelf {
+  id: string;
+  room_id: string;
+  name: string;
+  kind: MediaType;
+  position: number;
+  created_at: string;
+}
+
 /** room_media — search metadata is copied here once, when the medium is added. */
 export interface RoomMedia {
   id: string;
@@ -44,6 +54,8 @@ export interface RoomMedia {
   year: number | null;
   /** Comma-separated genres/subjects. */
   genres: string | null;
+  /** The shelf it stands on (filled in automatically for older rows). */
+  shelf_id: string | null;
   created_at: string;
 }
 
@@ -89,7 +101,7 @@ export interface Highlight {
 /**
  * The subset of a note the card UI needs. Also handy for demo/seed data.
  * `content` and `title` are `null` when the note is locked: the server strips
- * them before serialization, so spoilers never reach the browser (GEMINI.md §4).
+ * them before serialization, so spoilers never reach the browser (CLAUDE.md §4).
  */
 export type NoteCardData = Pick<
   Note,
@@ -103,7 +115,7 @@ export interface FeedNote extends NoteCardData {
   isUnlocked: boolean;
 }
 
-/** The Fog of War rule, in one place. See GEMINI.md §6A. */
+/** The Fog of War rule, in one place. See CLAUDE.md §6A. */
 export function isNoteUnlocked(note: { anchor_unit: number }, myCurrentUnit: number): boolean {
   return note.anchor_unit <= myCurrentUnit;
 }
@@ -111,7 +123,7 @@ export function isNoteUnlocked(note: { anchor_unit: number }, myCurrentUnit: num
 /**
  * Human label for a progress unit: "Ep 4" (TV), "p. 120" (book in pages),
  * "42%" (book in percent), "Start" at 0 for TV. Books may append a free-text
- * chapter label, e.g. "p. 120 · Ch. 8" (GEMINI.md §2).
+ * chapter label, e.g. "p. 120 · Ch. 8" (CLAUDE.md §2).
  */
 export function formatUnitLabel(
   mediaType: MediaType,
@@ -134,8 +146,13 @@ export function formatMediaUnit(
   return formatUnitLabel(media.media_type, unit, extra, media.total_pages != null);
 }
 
-/** Cover hosts we accept when saving media (GEMINI.md §4). */
-export const ALLOWED_COVER_HOSTS = ["image.tmdb.org", "covers.openlibrary.org"] as const;
+/** Cover hosts we accept when saving media (CLAUDE.md §4). */
+export const ALLOWED_COVER_HOSTS = [
+  "image.tmdb.org",
+  "covers.openlibrary.org",
+  "books.google.com",
+  "books.googleusercontent.com",
+] as const;
 
 /** A normalized search hit from Open Library or TMDB (see lib/media-api.ts). */
 export interface MediaSearchResult {
@@ -155,4 +172,6 @@ export interface MediaSearchResult {
   totalPages: number | null;
   creator: string | null;
   year: number | null;
+  /** Which APIs returned this item (books are searched on both). */
+  sources?: ("openlibrary" | "google")[];
 }

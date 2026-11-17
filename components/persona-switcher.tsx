@@ -3,7 +3,7 @@
 import { Users } from "lucide-react";
 
 /**
- * Floating persona bar for the demo (GEMINI.md §6C).
+ * Floating persona bar for the demo (CLAUDE.md §6F).
  * Lets a solo visitor view the room as different members to feel the
  * Fog of War from both sides — e.g. "Sarah (Ep 2)" vs "Alex (Ep 5)".
  */
@@ -34,8 +34,8 @@ export function PersonaSwitcher({
               type="button"
               onClick={() => onSelect(persona.id)}
               aria-pressed={active}
-              className={`min-h-10 rounded-full px-4 py-1.5 text-sm font-medium transition focus-visible:outline-2 focus-visible:outline-peach-deep ${
-                active ? "bg-peach text-ink" : "text-muted hover:bg-paper"
+              className={`min-h-10 rounded-full px-4 py-1.5 text-sm font-medium transition focus-visible:outline-2 focus-visible:outline-brand ${
+                active ? "bg-brand text-on-brand" : "text-muted hover:bg-paper"
               }`}
             >
               {persona.name} <span className="opacity-70">({labelFor(persona.id)})</span>

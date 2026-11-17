@@ -54,7 +54,7 @@ export function NoteCard({
     <article className="card p-5">
       <header className="flex flex-wrap items-center gap-2">
         <span className={`chip ${TAG_STYLES[note.tag]}`}>{TAG_LABELS[note.tag]}</span>
-        <span className="chip bg-peach/40 text-ink">{note.anchor_label}</span>
+        <span className="chip bg-brand-soft text-brand-ink">{note.anchor_label}</span>
         <span className="ml-auto text-xs text-muted">{note.author_name}</span>
       </header>
       {note.title && <h3 className="mt-3 font-display text-lg leading-snug">{note.title}</h3>}
