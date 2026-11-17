@@ -1,26 +1,125 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
+/* Scenara design system — pastel, warm, minimalist (GEMINI.md §8). Light only. */
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-paper: #fbf5ec;
+  --color-cream: #fffdf8;
+  --color-line: #ebdfcf;
+  --color-ink: #4a3a31;
+  --color-muted: #7b6858;
+
+  --color-peach: #f2b8a0;
+  --color-peach-deep: #e39f84;
+  --color-sage: #d3e0c8;
+  --color-sage-ink: #46613f;
+  --color-lavender: #e1d8f0;
+  --color-lavender-ink: #5a4882;
+  --color-butter: #f8ebbe;
+  --color-butter-ink: #7a5e12;
+  --color-sky: #d0e4ee;
+  --color-sky-ink: #3a6479;
+  --color-blush: #f6d8dc;
+  --color-blush-ink: #8a4455;
+  --color-wood: #ead7bd;
+  --color-wood-deep: #d8bd9a;
+
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-fraunces), ui-serif, Georgia, serif;
+  --shadow-soft: 0 1px 2px rgb(120 90 60 / 0.05), 0 8px 24px -12px rgb(120 90 60 / 0.18);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+:root {
+  color-scheme: light;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+}
+
+::selection {
+  background: var(--color-peach);
+  color: var(--color-ink);
+}
+
+@utility card {
+  @apply rounded-3xl border border-line bg-cream shadow-soft;
+}
+@utility empty {
+  @apply rounded-3xl border border-dashed border-line px-6 py-10 text-center text-sm text-muted;
+}
+@utility input {
+  @apply w-full rounded-2xl border border-line bg-cream px-4 py-2.5 text-sm text-ink outline-none transition placeholder:text-muted/70 focus:border-peach-deep focus:ring-4 focus:ring-peach/30;
+}
+@utility btn {
+  @apply inline-flex min-h-10 items-center justify-center gap-2 rounded-full px-5 py-2 text-sm font-medium transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-peach-deep disabled:cursor-not-allowed disabled:opacity-50;
+}
+@utility btn-primary {
+  @apply btn bg-peach text-ink hover:bg-peach-deep;
+}
+@utility btn-soft {
+  @apply btn border border-line bg-cream text-ink hover:bg-paper;
+}
+@utility chip {
+  @apply inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium;
+}
+@utility eyebrow {
+  @apply text-xs font-medium tracking-widest text-muted uppercase;
+}
+@utility link {
+  @apply font-medium text-ink underline decoration-peach-deep decoration-2 underline-offset-4 hover:decoration-ink;
+}
+
+/* Progress range: soft pastel track with a peach fill (--p is set inline, 0-100%). */
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  height: 1.75rem;
+}
+input[type="range"]::-webkit-slider-runnable-track {
+  height: 8px;
+  border-radius: 9999px;
+  background: linear-gradient(to right, var(--color-peach-deep) var(--p, 0%), var(--color-line) var(--p, 0%));
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  height: 22px;
+  width: 22px;
+  margin-top: -7px;
+  border-radius: 9999px;
+  background: var(--color-peach-deep);
+  border: 3px solid var(--color-cream);
+  box-shadow: 0 1px 4px rgb(90 60 30 / 0.35);
+}
+input[type="range"]::-moz-range-track {
+  height: 8px;
+  border-radius: 9999px;
+  background: var(--color-line);
+}
+input[type="range"]::-moz-range-progress {
+  height: 8px;
+  border-radius: 9999px;
+  background: var(--color-peach-deep);
+}
+input[type="range"]::-moz-range-thumb {
+  height: 18px;
+  width: 18px;
+  border-radius: 9999px;
+  background: var(--color-peach-deep);
+  border: 3px solid var(--color-cream);
+  box-shadow: 0 1px 4px rgb(90 60 30 / 0.35);
+}
+input[type="range"]:focus-visible {
+  outline: 2px solid var(--color-peach-deep);
+  outline-offset: 4px;
+  border-radius: 9999px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
 }
