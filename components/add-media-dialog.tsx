@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Loader2, Plus, Search, X } from "lucide-react";
+import { Skeleton } from "./skeleton";
 import { addMedia, type ActionState } from "@/lib/actions";
 import type { MediaSearchResult, MediaType } from "@/lib/types";
 import { Cover } from "./cover";
@@ -159,7 +160,21 @@ export function AddMediaDialog({
         </p>
       )}
 
-      {results.length > 0 && (
+      {searching && (
+        <ul aria-label="Searching" className="space-y-2">
+          {[0, 1, 2].map((i) => (
+            <li key={i} className="flex items-center gap-3 rounded-2xl border border-line bg-paper/60 p-2.5">
+              <Skeleton className="h-16 w-11 shrink-0" />
+              <div className="flex-1 space-y-2">
+                <Skeleton className="h-4 w-2/3" />
+                <Skeleton className="h-3 w-1/3" />
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {!searching && results.length > 0 && (
         <ul className="space-y-2">
           {results.map((item) => (
             <li

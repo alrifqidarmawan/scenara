@@ -6,13 +6,15 @@ import { BookShelf } from "@/components/book-shelf";
 import { ShelfBar } from "@/components/shelf-bar";
 import { ShelfOverview } from "@/components/shelf-overview";
 import { ShelfTitle } from "@/components/shelf-title";
+import { MembersPanel } from "@/components/members-panel";
+import { ModalSkeleton, RoomSkeleton } from "@/components/room-skeleton";
 import { CopyLinkButton } from "@/components/copy-link-button";
 import { JoinRoom } from "@/components/join-room";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { MediaModal } from "@/components/media-modal";
 import { SETUP_HINT, isSupabaseConfigured } from "@/lib/supabase-server";
+import { canEditMedia, getAccess } from "@/lib/permissions";
 import {
-  getCurrentMember,
   getFeed,
   getHighlights,
   getMembers,
@@ -20,7 +22,7 @@ import {
   getRoomOverview,
   isUuid,
 } from "@/lib/data";
-import { formatMediaUnit } from "@/lib/types";
+import { formatMediaUnit, type RoomMedia } from "@/lib/types";
 
 /**
  * Room dashboard (CLAUDE.md §7): join prompt, or media list + member progress.
@@ -29,7 +31,7 @@ import { formatMediaUnit } from "@/lib/types";
  */
 export default function RoomPage(props: PageProps<"/room/[code]">) {
   return (
-    <Suspense fallback={<p className="py-24 text-center text-sm text-muted">Loading room…</p>}>
+    <Suspense fallback={<RoomSkeleton />}>
       <RoomContent params={props.params} searchParams={props.searchParams} />
     </Suspense>
   );
@@ -71,9 +73,9 @@ async function RoomContent({
   const room = await getRoomByCode(code);
   if (!room) notFound();
 
-  const member = await getCurrentMember(room);
+  const access = await getAccess(room);
 
-  if (!member) {
+  if (!access) {
     const members = await getMembers(room.id);
     return (
       <>
@@ -85,13 +87,16 @@ async function RoomContent({
           </div>
           <JoinRoom
             roomCode={room.code}
-            members={members.map((m) => ({ id: m.id, nickname: m.nickname }))}
+            // Only viewers can be reclaimed by name (the link must not hand out edit rights),
+            // and only their ids are ever sent to the browser.
+            members={members.filter((m) => m.role === "viewer").map((m) => ({ id: m.id, nickname: m.nickname }))}
           />
         </main>
       </>
     );
   }
 
+  const { member, canEdit, isOwner, ownerKey } = access;
   const { shelves, media, members, progress } = await getRoomOverview(room);
   if (shelves.length === 0) {
     // The `shelves` table doesn't exist yet (older database): say how to fix it.
@@ -128,27 +133,23 @@ async function RoomContent({
   for (const m of media) (itemsByShelf[m.shelf_id ?? ""] ??= []).push(m);
   const currentItems = itemsByShelf[current.id] ?? [];
 
-  let modal: React.ReactNode = null;
-  if (open) {
-    const myUnit = progress[open.id]?.[member.id] ?? 0;
-    const feed = await getFeed(open.id, myUnit);
-    const highlights = await getHighlights(feed.filter((n) => n.isUnlocked).map((n) => n.id));
-    modal = (
-      <MediaModal
+  const modal = open ? (
+    <Suspense key={open.id} fallback={<ModalSkeleton />}>
+      <ModalLoader
         roomCode={room.code}
         roomPath={roomPath}
         media={open}
         shelves={shelves.filter((sh) => sh.kind === open.media_type).map((sh) => ({ id: sh.id, name: sh.name }))}
-        myUnit={myUnit}
+        myUnit={progress[open.id]?.[member.id] ?? 0}
+        memberId={member.id}
         memberName={member.nickname}
-        feed={feed}
-        highlights={highlights}
-        others={Object.entries(progress[open.id] ?? {})
-          .filter(([id]) => id !== member.id)
-          .map(([id, unit]) => ({ name: nameById.get(id) ?? "Someone", unit }))}
+        canEdit={canEdit}
+        canEditItem={canEditMedia(access, open)}
+        names={Object.fromEntries(nameById)}
+        progressByMember={progress[open.id] ?? {}}
       />
-    );
-  }
+    </Suspense>
+  ) : null;
 
   return (
     <>
@@ -165,6 +166,7 @@ async function RoomContent({
         <section className="space-y-5">
           <ShelfBar
             roomCode={room.code}
+            canEdit={canEdit}
             currentId={current.id}
             overview={overview}
             shelves={shelves.map((sh) => ({ id: sh.id, name: sh.name, kind: sh.kind, count: (itemsByShelf[sh.id] ?? []).length }))}
@@ -181,8 +183,11 @@ async function RoomContent({
                 shelf={{ id: current.id, name: current.name }}
                 count={currentItems.length}
                 canDelete={shelves.length > 1}
+                canEdit={canEdit}
               />
-              <AddMediaDialog roomCode={room.code} shelf={{ id: current.id, name: current.name, kind: current.kind }} />
+              {canEdit && (
+                <AddMediaDialog roomCode={room.code} shelf={{ id: current.id, name: current.name, kind: current.kind }} />
+              )}
               <BookShelf
                 variant={current.kind}
                 hrefFor={(id) => `${roomPath}&media=${id}`}
@@ -196,31 +201,73 @@ async function RoomContent({
               />
               {currentItems.length === 0 && (
                 <p className="text-center text-sm text-muted">
-                  This shelf is empty. {current.kind === "book" ? "Add a book" : "Add a show"} to start it.
+                  This shelf is empty.{" "}
+                  {canEdit
+                    ? `${current.kind === "book" ? "Add a book" : "Add a show"} to start it.`
+                    : "A collaborator can add the first one."}
                 </p>
               )}
             </div>
           )}
         </section>
 
-        <section>
-          <h2 className="eyebrow">In this room · {members.length}</h2>
-          <ul className="mt-3 flex flex-wrap gap-2">
-            {members.map((m) => (
-              <li
-                key={m.id}
-                className={`chip px-3.5 py-1.5 text-sm ${
-                  m.id === member.id ? "bg-brand-soft text-brand-ink" : "bg-cream text-muted ring-1 ring-line"
-                }`}
-              >
-                {m.nickname}
-                {m.id === member.id && " (you)"}
-              </li>
-            ))}
-          </ul>
-        </section>
+        <MembersPanel
+          roomCode={room.code}
+          isOwner={isOwner}
+          ownerKey={ownerKey}
+          roomHasOwner={room.owner_key_hash != null}
+          members={members.map((m) => ({ id: m.id, nickname: m.nickname, role: m.role, isYou: m.id === member.id }))}
+        />
       </main>
       {modal}
     </>
+  );
+}
+
+/** Loads the open item's entries and highlights; shows a skeleton modal until they arrive. */
+async function ModalLoader({
+  roomCode,
+  roomPath,
+  media,
+  shelves,
+  myUnit,
+  memberId,
+  memberName,
+  canEdit,
+  canEditItem,
+  names,
+  progressByMember,
+}: {
+  roomCode: string;
+  roomPath: string;
+  media: RoomMedia;
+  shelves: { id: string; name: string }[];
+  myUnit: number;
+  memberId: string;
+  memberName: string;
+  canEdit: boolean;
+  canEditItem: boolean;
+  names: Record<string, string>;
+  progressByMember: Record<string, number>;
+}) {
+  // Locked notes are stripped inside getFeed.
+  const feed = await getFeed(media.id, myUnit);
+  const highlights = await getHighlights(feed.filter((n) => n.isUnlocked).map((n) => n.id));
+  return (
+    <MediaModal
+      roomCode={roomCode}
+      roomPath={roomPath}
+      media={media}
+      shelves={shelves}
+      myUnit={myUnit}
+      memberName={memberName}
+      canEdit={canEdit}
+      canEditItem={canEditItem}
+      feed={feed}
+      highlights={highlights}
+      others={Object.entries(progressByMember)
+        .filter(([id]) => id !== memberId)
+        .map(([id, unit]) => ({ name: names[id] ?? "Someone", unit }))}
+    />
   );
 }

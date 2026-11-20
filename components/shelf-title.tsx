@@ -11,12 +11,15 @@ export function ShelfTitle({
   shelf,
   count,
   canDelete,
+  canEdit,
 }: {
   roomCode: string;
   shelf: { id: string; name: string };
   count: number;
   /** False when it is the room's only shelf. */
   canDelete: boolean;
+  /** Owner or collaborator. */
+  canEdit: boolean;
 }) {
   const router = useRouter();
   const [editing, setEditing] = useState(false);
@@ -51,7 +54,7 @@ export function ShelfTitle({
         <span className="chip bg-paper text-muted ring-1 ring-line">
           {count} {count === 1 ? "item" : "items"}
         </span>
-        <button
+        {canEdit && <button
           type="button"
           onClick={() => {
             setName(shelf.name);
@@ -63,7 +66,7 @@ export function ShelfTitle({
           className="flex h-9 w-9 items-center justify-center rounded-full text-muted transition hover:bg-brand-soft hover:text-ink"
         >
           <Pencil className="h-4 w-4" />
-        </button>
+        </button>}
         {error && <span role="alert" className="text-sm text-blush-ink">{error}</span>}
       </div>
     );

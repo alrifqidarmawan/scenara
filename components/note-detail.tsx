@@ -46,11 +46,14 @@ export function NoteDetail({
   roomCode,
   note,
   highlights,
+  canComment,
   onBack,
 }: {
   roomCode: string;
   note: FeedNote & { content: string };
   highlights: Highlight[];
+  /** Owner and collaborators only; viewers just read. */
+  canComment: boolean;
   onBack: () => void;
 }) {
   const textRef = useRef<HTMLParagraphElement>(null);
@@ -145,7 +148,9 @@ export function NoteDetail({
         )}
       </p>
 
-      {selection ? (
+      {!canComment ? (
+        <p className="text-xs text-muted">View-only: ask the owner to make you a collaborator to comment.</p>
+      ) : selection ? (
         <form onSubmit={submit} className="space-y-2 rounded-2xl border border-brand/40 bg-brand-soft/50 p-3">
           <div className="flex items-start gap-2">
             <Highlighter className="mt-0.5 h-4 w-4 shrink-0 text-ink" aria-hidden="true" />

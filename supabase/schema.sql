@@ -1,4 +1,4 @@
--- Scenara — MVP v1.4 schema (CLAUDE.md §5): 7 tables + a public `covers` storage bucket.
+-- Scenara — MVP v1.5 schema (CLAUDE.md §5): 7 tables + a public `covers` storage bucket.
 -- Run in the Supabase SQL Editor (Dashboard → SQL → New query).
 -- Idempotent: safe to re-run. Tables use `if not exists`; indexes use `if not exists`;
 -- enabling RLS twice is a no-op.
@@ -97,6 +97,15 @@ alter table room_media add column if not exists year int check (year is null or 
 alter table room_media add column if not exists genres text check (genres is null or char_length(genres) <= 200);
 
 alter table room_media add column if not exists shelf_id uuid references shelves(id) on delete set null;
+
+-- v1.5 roles. The owner proves ownership with a secret key (only its SHA-256 is stored);
+-- members are 'owner', 'collaborator' (can add and edit) or 'viewer' (read + own progress).
+-- Members that already exist when this runs become collaborators, so old rooms keep working;
+-- new joiners are inserted as 'viewer' by the app.
+alter table rooms add column if not exists owner_key_hash text;
+alter table room_media add column if not exists added_by uuid references room_members(id) on delete set null;
+alter table room_members add column if not exists role text not null default 'collaborator'
+  check (role in ('owner', 'collaborator', 'viewer'));
 
 -- Set or change a book's total pages. Atomically rescales every member's progress and
 -- every note anchor (percent -> pages, or old pages -> new pages), so nothing drifts.
