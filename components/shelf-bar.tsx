@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { BookOpen, Loader2, Plus, Tv, X, ZoomIn, ZoomOut } from "lucide-react";
+import { BookOpen, Film, Loader2, Plus, Tv, X, ZoomIn, ZoomOut } from "lucide-react";
 import { createShelf } from "@/lib/actions";
 import { LinkPending } from "./link-pending";
 import type { MediaType } from "@/lib/types";
@@ -63,7 +63,7 @@ export function ShelfBar({
         <nav aria-label="Shelves" className="-mx-1 flex min-w-0 flex-1 gap-2 overflow-x-auto px-1 py-1">
           {shelves.map((s) => {
             const active = !overview && s.id === currentId;
-            const Icon = s.kind === "book" ? BookOpen : Tv;
+            const Icon = s.kind === "book" ? BookOpen : s.kind === "movie" ? Film : Tv;
             return (
               <Link
                 key={s.id}
@@ -132,6 +132,7 @@ export function ShelfBar({
               [
                 { value: "book", label: "Books", icon: BookOpen },
                 { value: "tv", label: "Shows", icon: Tv },
+                { value: "movie", label: "Movies", icon: Film },
               ] as const
             ).map((opt) => (
               <button
@@ -148,7 +149,7 @@ export function ShelfBar({
               </button>
             ))}
             <span className="text-xs text-muted">
-              {kind === "book" ? "A wooden shelf for books." : "A painted film-strip shelf for shows."}
+              {kind === "book" ? "A wooden shelf for books." : kind === "movie" ? "A film-strip shelf for movies." : "A painted film-strip shelf for shows."}
             </span>
             <button type="submit" disabled={pending || !name.trim()} className="btn-primary ml-auto">
               {pending && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}

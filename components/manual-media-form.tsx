@@ -94,6 +94,8 @@ export function ManualMediaForm({
             <input name="year" type="number" inputMode="numeric" min={1} max={3000} placeholder="Year" aria-label="Year" className="input" />
             {mediaType === "book" ? (
               <input name="pages" type="number" inputMode="numeric" min={1} max={10000} placeholder="Pages" aria-label="Total pages" className="input" />
+            ) : mediaType === "movie" ? (
+              <input name="minutes" type="number" inputMode="numeric" min={1} max={1500} required placeholder="Minutes *" aria-label="Length in minutes" className="input" />
             ) : (
               <input name="episodes" type="number" inputMode="numeric" min={1} max={5000} required placeholder="Episodes *" aria-label="Total episodes" className="input" />
             )}

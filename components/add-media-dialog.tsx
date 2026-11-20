@@ -88,7 +88,7 @@ export function AddMediaDialog({
     return (
       <button type="button" onClick={() => setOpen(true)} className="btn-primary">
         <Plus className="h-4 w-4" aria-hidden="true" />
-        {shelf.kind === "book" ? "Add a book" : "Add a show"}
+        {shelf.kind === "book" ? "Add a book" : shelf.kind === "movie" ? "Add a movie" : "Add a show"}
       </button>
     );
   }
@@ -135,7 +135,7 @@ export function AddMediaDialog({
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           aria-label="Search"
-          placeholder={mediaType === "tv" ? `Search shows for “${shelf.name}”…` : `Search books for “${shelf.name}”…`}
+          placeholder={`Search ${mediaType === "book" ? "books" : mediaType === "movie" ? "movies" : "shows"} for “${shelf.name}”…`}
           className="input"
           autoFocus
         />

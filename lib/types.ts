@@ -5,7 +5,21 @@
  */
 
 /** v1 supports exactly two mediums: TV series and books. */
-export type MediaType = "tv" | "book";
+/** `movie` is progressed in minutes of its runtime, `tv` in episodes, `book` in pages or percent. */
+export type MediaType = "tv" | "book" | "movie";
+
+/** Movies share the film-strip look of TV shelves. */
+export function shelfTheme(kind: MediaType): "book" | "tv" {
+  return kind === "book" ? "book" : "tv";
+}
+
+/** "95" -> "1h 35m", "45" -> "45 min". */
+export function formatRuntime(minutes: number): string {
+  if (minutes < 60) return `${minutes} min`;
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return m ? `${h}h ${m}m` : `${h}h`;
+}
 
 /** Lightweight note tags — no complex post types in v1. */
 export type NoteTag = "note" | "theory" | "question" | "review";
@@ -130,6 +144,8 @@ export type NoteCardData = Pick<
 /** A note as returned to the UI for one viewer, with its lock state resolved. */
 export interface FeedNote extends NoteCardData {
   id: string;
+  /** Author, so the UI can offer delete to them (the server re-checks). */
+  member_id: string;
   created_at: string;
   isUnlocked: boolean;
 }
@@ -146,7 +162,7 @@ export function isNoteUnlocked(
 }
 
 /**
- * Human label for a progress unit: "Ep 4" (TV), "p. 120" (book in pages),
+ * Human label for a progress unit: "Ep 4" (TV), "1h 35m" (movie), "p. 120" (book in pages),
  * "42%" (book in percent), "Start" at 0 for TV. Books may append a free-text
  * chapter label, e.g. "p. 120 · Ch. 8" (CLAUDE.md §2).
  */
@@ -157,7 +173,15 @@ export function formatUnitLabel(
   pages = false,
 ): string {
   const base =
-    mediaType === "book" ? (pages ? `p. ${unit}` : `${unit}%`) : unit === 0 ? "Start" : `Ep ${unit}`;
+    mediaType === "book"
+      ? pages
+        ? `p. ${unit}`
+        : `${unit}%`
+      : unit === 0
+        ? "Start"
+        : mediaType === "movie"
+          ? formatRuntime(unit)
+          : `Ep ${unit}`;
   const suffix = extra?.trim();
   return suffix ? `${base} · ${suffix}` : base;
 }

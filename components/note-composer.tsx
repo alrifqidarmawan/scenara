@@ -74,7 +74,7 @@ export function NoteComposer({
         required
         maxLength={80}
         aria-label="Entry title"
-        placeholder={mediaType === "book" ? "Title, e.g. Chapter 8: The reveal" : "Title, e.g. Ep 4: That ending"}
+        placeholder={mediaType === "book" ? "Title, e.g. Chapter 8: The reveal" : mediaType === "movie" ? "Title, e.g. The twist at the hour mark" : "Title, e.g. Ep 4: That ending"}
         className="input font-display text-base"
       />
 

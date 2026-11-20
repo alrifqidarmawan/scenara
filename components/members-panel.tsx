@@ -2,7 +2,8 @@
 
 import { useState, useTransition } from "react";
 import { Check, Copy, Crown, Eye, KeyRound, PenLine } from "lucide-react";
-import { claimOwnership, setMemberRole } from "@/lib/actions";
+import { claimOwnership, removeMember, setMemberRole } from "@/lib/actions";
+import { DeleteButton } from "./delete-button";
 import type { MemberRole } from "@/lib/types";
 import { Spinner } from "./skeleton";
 
@@ -96,6 +97,13 @@ export function MembersPanel({
                   {busyId === m.id && <Spinner className="h-3 w-3" />}
                   {m.role === "collaborator" ? "Make viewer" : "Make collaborator"}
                 </button>
+              )}
+              {canChange && (
+                <DeleteButton
+                  label={`Remove ${m.nickname}`}
+                  confirmText={`Remove ${m.nickname} from the room? Their entries, comments, replies and progress go too.`}
+                  onDelete={() => removeMember(roomCode, m.id)}
+                />
               )}
             </li>
           );

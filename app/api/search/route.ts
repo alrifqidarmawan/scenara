@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { searchBooks, searchTvSeries } from "@/lib/media-api";
+import { searchBooks, searchMovies, searchTvSeries } from "@/lib/media-api";
+import { TOO_FAST, ipLimit } from "@/lib/rate-limit";
 
 /**
  * Server proxy for Open Library (books) and TMDB (TV).
@@ -11,7 +12,7 @@ import { searchBooks, searchTvSeries } from "@/lib/media-api";
 
 const searchParamsSchema = z.object({
   q: z.string().min(2, "Type at least 2 characters.").max(120),
-  type: z.enum(["tv", "book"]),
+  type: z.enum(["tv", "book", "movie"]),
 });
 
 export async function GET(request: Request) {
@@ -28,12 +29,20 @@ export async function GET(request: Request) {
     );
   }
 
+  // Protects the free Google Books / TMDB quotas from one noisy client.
+  if (!(await ipLimit("search", 30, 60))) {
+    return Response.json({ error: TOO_FAST }, { status: 429 });
+  }
+
   const query = parsed.data.q.trim();
   if (!query) {
     return Response.json({ error: "Type at least 2 characters." }, { status: 400 });
   }
 
   try {
+    if (parsed.data.type === "movie") {
+      return Response.json({ results: await searchMovies(query) });
+    }
     if (parsed.data.type === "tv") {
       return Response.json({ results: await searchTvSeries(query) });
     }

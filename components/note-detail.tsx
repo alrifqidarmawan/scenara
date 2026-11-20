@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, CornerDownRight, Highlighter, Loader2, X } from "lucide-react";
-import { addHighlight, addReply } from "@/lib/actions";
+import { addHighlight, addReply, deleteHighlight, deleteNote, deleteReply } from "@/lib/actions";
+import { DeleteButton } from "./delete-button";
 import type { FeedNote, Highlight, Reply } from "@/lib/types";
 
 const TAG_LABELS: Record<FeedNote["tag"], string> = {
@@ -47,14 +48,20 @@ export function NoteDetail({
   note,
   highlights,
   replies,
+  memberId,
+  isOwner,
   onBack,
 }: {
   roomCode: string;
   note: FeedNote & { content: string };
   highlights: Highlight[];
   replies: Reply[];
+  memberId: string;
+  isOwner: boolean;
   onBack: () => void;
 }) {
+  /** Authors remove their own words; the owner can remove anything (the server re-checks). */
+  const canRemove = (authorId: string) => isOwner || authorId === memberId;
   const textRef = useRef<HTMLParagraphElement>(null);
   const [selection, setSelection] = useState<{ start: number; end: number; text: string } | null>(null);
   const [comment, setComment] = useState("");
@@ -125,6 +132,14 @@ export function NoteDetail({
         <span className="chip bg-brand-soft text-brand-ink">{note.anchor_label}</span>
         <span className="chip bg-paper text-muted ring-1 ring-line">{TAG_LABELS[note.tag]}</span>
         <span className="ml-auto text-xs text-muted">{note.author_name}</span>
+        {canRemove(note.member_id) && (
+          <DeleteButton
+            label="Delete entry"
+            confirmText="Delete this entry with its comments and replies?"
+            onDelete={() => deleteNote(roomCode, note.id)}
+            onDone={onBack}
+          />
+        )}
       </header>
 
       {note.title && <h3 className="font-display text-2xl leading-snug">{note.title}</h3>}
@@ -193,6 +208,7 @@ export function NoteDetail({
         noteId={note.id}
         highlightId={null}
         replies={replies.filter((r) => r.highlight_id === null)}
+        canRemove={canRemove}
         label="Replies to this entry"
         placeholder="Reply to this entry…"
       />
@@ -216,12 +232,20 @@ export function NoteDetail({
                   <p className="mt-1.5 text-sm text-ink">{h.comment}</p>
                   <p className="mt-1 text-xs text-muted">{h.author_name}</p>
                 </button>
+                {canRemove(h.member_id) && (
+                  <DeleteButton
+                    label="Delete comment"
+                    confirmText="Delete this comment and its replies?"
+                    onDelete={() => deleteHighlight(roomCode, h.id)}
+                  />
+                )}
                 <div className="mt-1 pl-3">
                   <ReplyThread
                     roomCode={roomCode}
                     noteId={note.id}
                     highlightId={h.id}
                     replies={replies.filter((r) => r.highlight_id === h.id)}
+                    canRemove={canRemove}
                     label="Replies to this comment"
                     placeholder="Reply…"
                     compact
@@ -242,6 +266,7 @@ function ReplyThread({
   noteId,
   highlightId,
   replies,
+  canRemove,
   label,
   placeholder,
   compact = false,
@@ -250,6 +275,7 @@ function ReplyThread({
   noteId: string;
   highlightId: string | null;
   replies: Reply[];
+  canRemove: (authorId: string) => boolean;
   label: string;
   placeholder: string;
   compact?: boolean;
@@ -278,6 +304,13 @@ function ReplyThread({
             <li key={r.id} className="text-sm">
               <span className="font-medium">{r.author_name}</span>
               <span className="text-ink/80"> · {r.content}</span>
+              {canRemove(r.member_id) && (
+                <DeleteButton
+                  label="Delete reply"
+                  confirmText="Delete this reply?"
+                  onDelete={() => deleteReply(roomCode, r.id)}
+                />
+              )}
             </li>
           ))}
         </ul>

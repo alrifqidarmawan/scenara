@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { moveMedia } from "@/lib/actions";
+import { deleteMedia, deleteNote, moveMedia } from "@/lib/actions";
+import { DeleteButton } from "./delete-button";
 import { Lock, PenLine, X } from "lucide-react";
 import { CoverInfo } from "./cover-info";
 import { MediaInfo, hasInfo } from "./media-info";
@@ -38,6 +39,8 @@ export function MediaModal({
   myUnit,
   memberName,
   canEditItem,
+  memberId,
+  isOwner,
   others,
   feed,
   highlights,
@@ -52,6 +55,8 @@ export function MediaModal({
   memberName: string;
   /** May edit the item itself (pages, shelf): who added it, or the owner. */
   canEditItem: boolean;
+  memberId: string;
+  isOwner: boolean;
   others: { name: string; unit: number }[];
   feed: FeedNote[];
   highlights: Highlight[];
@@ -123,7 +128,7 @@ export function MediaModal({
               </div>
             </div>
             <div className="min-w-0 md:mt-5 md:text-center">
-              <p className="eyebrow">{isBook ? "Book" : "TV series"}</p>
+              <p className="eyebrow">{isBook ? "Book" : media.media_type === "movie" ? "Movie" : "TV series"}</p>
               <h2 className="font-display text-xl leading-tight">{media.title}</h2>
             </div>
           </div>
@@ -174,6 +179,16 @@ export function MediaModal({
             </label>
           )}
 
+          {canEditItem && (
+            <DeleteButton
+              withLabel
+              label={isBook ? "Remove this book" : media.media_type === "movie" ? "Remove this movie" : "Remove this show"}
+              confirmText={`Remove “${media.title}” with all its entries and everyone's progress? This can't be undone.`}
+              onDelete={() => deleteMedia(roomCode, media.id)}
+              onDone={close}
+            />
+          )}
+
           {others.length > 0 && (
             <div>
               <p className="eyebrow">Friends</p>
@@ -196,12 +211,14 @@ export function MediaModal({
               note={selected as FeedNote & { content: string }}
               highlights={highlights.filter((h) => h.note_id === selected.id)}
               replies={replies.filter((r) => r.note_id === selected.id)}
+              memberId={memberId}
+              isOwner={isOwner}
               onBack={() => setSelectedId(null)}
             />
           ) : (
             <>
               <div className="flex items-center justify-between gap-3 pr-10">
-                <h3 className="font-display text-xl">{isBook ? "Chapters & reviews" : "Episodes & reviews"}</h3>
+                <h3 className="font-display text-xl">{isBook ? "Chapters & reviews" : media.media_type === "movie" ? "Thoughts & reviews" : "Episodes & reviews"}</h3>
                 {canEditItem && (
                   <button type="button" onClick={() => setWriting((w) => !w)} className="btn-primary min-h-9 px-4">
                     <PenLine className="h-4 w-4" aria-hidden="true" />
@@ -272,6 +289,15 @@ export function MediaModal({
                               <div className="h-3 w-11/12 rounded-full bg-butter-ink/40" />
                               <div className="h-3 w-6/12 rounded-full bg-butter-ink/40" />
                             </div>
+                            {(isOwner || n.member_id === memberId) && (
+                              <div className="mt-2">
+                                <DeleteButton
+                                  label="Delete entry"
+                                  confirmText="Delete this locked entry?"
+                                  onDelete={() => deleteNote(roomCode, n.id)}
+                                />
+                              </div>
+                            )}
                           </div>
                         )}
                       </li>

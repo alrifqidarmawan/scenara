@@ -1,4 +1,4 @@
-import type { RoomMedia } from "@/lib/types";
+import { formatRuntime, type RoomMedia } from "@/lib/types";
 
 /** True when there is anything worth showing besides the title. */
 export function hasInfo(media: RoomMedia): boolean {
@@ -12,6 +12,7 @@ export function MediaInfo({ media }: { media: RoomMedia }) {
     media.year ? String(media.year) : null,
     media.media_type === "book" && media.total_pages ? `${media.total_pages} pages` : null,
     media.media_type === "tv" ? `${media.total_units} episodes` : null,
+    media.media_type === "movie" ? formatRuntime(media.total_units) : null,
   ].filter(Boolean);
 
   return (

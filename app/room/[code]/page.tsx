@@ -23,7 +23,7 @@ import {
   getRoomOverview,
   isUuid,
 } from "@/lib/data";
-import { formatMediaUnit, type RoomMedia } from "@/lib/types";
+import { formatMediaUnit, shelfTheme, type RoomMedia } from "@/lib/types";
 
 /**
  * Room dashboard (CLAUDE.md §7): join prompt, or media list + member progress.
@@ -145,6 +145,7 @@ async function RoomContent({
         memberId={member.id}
         memberName={member.nickname}
         canEditItem={canEditMedia(access, open)}
+        isOwner={isOwner}
         names={Object.fromEntries(nameById)}
         progressByMember={progress[open.id] ?? {}}
       />
@@ -189,13 +190,13 @@ async function RoomContent({
                 <AddMediaDialog roomCode={room.code} shelf={{ id: current.id, name: current.name, kind: current.kind }} />
               )}
               <BookShelf
-                variant={current.kind}
+                variant={shelfTheme(current.kind)}
                 hrefFor={(id) => `${roomPath}&media=${id}`}
                 items={currentItems.map((m) => {
                   const unit = progress[m.id]?.[member.id] ?? 0;
                   return {
                     media: m,
-                    progressLabel: unit === 0 && m.media_type === "tv" ? "Not started" : formatMediaUnit(m, unit),
+                    progressLabel: unit === 0 && m.media_type !== "book" ? "Not started" : formatMediaUnit(m, unit),
                   };
                 })}
               />
@@ -203,7 +204,7 @@ async function RoomContent({
                 <p className="text-center text-sm text-muted">
                   This shelf is empty.{" "}
                   {canEdit
-                    ? `${current.kind === "book" ? "Add a book" : "Add a show"} to start it.`
+                    ? `${current.kind === "book" ? "Add a book" : current.kind === "movie" ? "Add a movie" : "Add a show"} to start it.`
                     : "A collaborator can add the first one."}
                 </p>
               )}
@@ -234,6 +235,7 @@ async function ModalLoader({
   memberId,
   memberName,
   canEditItem,
+  isOwner,
   names,
   progressByMember,
 }: {
@@ -245,6 +247,7 @@ async function ModalLoader({
   memberId: string;
   memberName: string;
   canEditItem: boolean;
+  isOwner: boolean;
   names: Record<string, string>;
   progressByMember: Record<string, number>;
 }) {
@@ -261,6 +264,8 @@ async function ModalLoader({
       myUnit={myUnit}
       memberName={memberName}
       canEditItem={canEditItem}
+      memberId={memberId}
+      isOwner={isOwner}
       feed={feed}
       highlights={highlights}
       replies={replies}

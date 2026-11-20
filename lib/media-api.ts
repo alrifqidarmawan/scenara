@@ -16,6 +16,8 @@ import type { MediaSearchResult } from "./types";
 const OPEN_LIBRARY_SEARCH_URL = "https://openlibrary.org/search.json";
 const GOOGLE_BOOKS_URL = "https://www.googleapis.com/books/v1/volumes";
 const TMDB_SEARCH_URL = "https://api.themoviedb.org/3/search/tv";
+const TMDB_MOVIE_SEARCH_URL = "https://api.themoviedb.org/3/search/movie";
+const TMDB_MOVIE_URL = "https://api.themoviedb.org/3/movie";
 const TMDB_SERIES_URL = "https://api.themoviedb.org/3/tv";
 const TMDB_IMAGE_BASE_URL = "https://image.tmdb.org/t/p/w342";
 
@@ -262,6 +264,81 @@ export async function searchTvSeries(query: string): Promise<MediaSearchResult[]
       creator: null,
       year: item.first_air_date ? Number(item.first_air_date.slice(0, 4)) || null : null,
     }));
+}
+
+/** TMDB movie search. Runtime is resolved when the movie is added (see getMovieDetails). */
+export async function searchMovies(query: string): Promise<MediaSearchResult[]> {
+  const url = new URL(TMDB_MOVIE_SEARCH_URL);
+  url.searchParams.set("api_key", requireTmdbKey());
+  url.searchParams.set("query", query);
+  url.searchParams.set("include_adult", "false");
+
+  const res = await fetch(url);
+  if (!res.ok) {
+    throw new Error(`TMDB responded with ${res.status}.`);
+  }
+
+  const data = (await res.json()) as {
+    results?: Array<{
+      id?: number;
+      title?: string;
+      poster_path?: string | null;
+      release_date?: string;
+    }>;
+  };
+
+  return (data.results ?? [])
+    .filter((item) => Boolean(item.id))
+    .slice(0, SEARCH_LIMIT)
+    .map((item) => ({
+      mediaType: "movie" as const,
+      externalId: String(item.id),
+      title: item.title ?? "Untitled",
+      coverUrl: item.poster_path ? `${TMDB_IMAGE_BASE_URL}${item.poster_path}` : null,
+      subtitle: item.release_date?.slice(0, 4) ?? null,
+      totalUnits: null,
+      totalPages: null,
+      creator: null,
+      year: item.release_date ? Number(item.release_date.slice(0, 4)) || null : null,
+    }));
+}
+
+export interface MovieDetails {
+  /** Runtime in minutes; 0 when TMDB does not report one. */
+  minutes: number;
+  description: string | null;
+  year: number | null;
+  genres: string | null;
+  /** Director(s). */
+  creator: string | null;
+}
+
+/** Details for a TMDB movie, fetched once when it is added (never on page loads). */
+export async function getMovieDetails(externalId: string): Promise<MovieDetails> {
+  const url = new URL(`${TMDB_MOVIE_URL}/${encodeURIComponent(externalId)}`);
+  url.searchParams.set("api_key", requireTmdbKey());
+  url.searchParams.set("append_to_response", "credits");
+
+  const res = await fetch(url);
+  if (!res.ok) {
+    throw new Error(`TMDB responded with ${res.status} for movie ${externalId}.`);
+  }
+
+  const data = (await res.json()) as {
+    runtime?: number | null;
+    overview?: string;
+    release_date?: string;
+    genres?: { name: string }[];
+    credits?: { crew?: { job?: string; name: string }[] };
+  };
+  const directors = data.credits?.crew?.filter((c) => c.job === "Director").map((c) => c.name);
+  return {
+    minutes: data.runtime ?? 0,
+    description: data.overview?.trim() || null,
+    year: data.release_date ? Number(data.release_date.slice(0, 4)) || null : null,
+    genres: data.genres?.map((g) => g.name).join(", ") || null,
+    creator: directors?.length ? directors.join(", ") : null,
+  };
 }
 
 export interface TvDetails {

@@ -20,13 +20,14 @@ Single source of truth for AI agents and humans working in this repo. Read it fu
 ## 2. Strict Scope and Non-Goals (do not over-engineer)
 
 - **No login in v1.** No passwords, email verification, OAuth, or Supabase Auth. Pattern: **Room Link + Nickname** (`/room/[code]`). **Roles** (owner / collaborator / viewer, §6H) decide who may change things; the link alone only gives read access.
-- **Only two mediums:** TV series (`tv`) and books (`book`). No movies.
+- **Three mediums:** TV series (`tv`), books (`book`) and movies (`movie`, TMDB).
 - **One post type:** an *entry* (the `notes` table) with a required title, a body, and an optional tag (`note`, `theory`, `question`, `review`).
 - **No live chat or Realtime.** Server fetch plus `revalidatePath` after each action is enough.
 - **No nested threads, polls, or custom roles.** Comments are flat *highlight comments* on a selected passage (§6D), each entry and comment can have one flat list of replies (§6H).
 - **Progress units:**
   - **TV:** integer episode `0..total_units` (`0` = not started), label `Ep 4`.
   - **Books in pages (preferred):** `room_media.total_pages` set, `total_units` = pages, progress `0..pages`, label `p. 120`. The percent is **derived** (`page / total`). Members type an exact page *or* drag the slider.
+  - **Movies:** `total_units` = runtime in **minutes** (TMDB), progress `0..runtime`, label `1h 35m`; slider plus exact minute input. TMDB without a runtime: add manually with minutes. Movie shelves share the film-strip theme (`shelfTheme`).
   - **Books in percent (fallback):** no page count, `total_units` = 100, label `42%`.
   - Book entries may carry a free-text chapter label, e.g. `p. 120 · Ch. 8`. Never fetch chapters from APIs.
   - **Total pages is the end of the book and can be set or corrected any time** from the modal. The SQL function `set_book_pages` atomically rescales every member's progress and every entry's anchor and label (percent→pages, or old pages→new pages).
@@ -41,7 +42,7 @@ Single source of truth for AI agents and humans working in this repo. Read it fu
 - **Validation:** Zod v4 on every Server Action and API route.
 - **External APIs (read-only, called when searching or adding):**
   - Books: **Open Library AND Google Books, queried in parallel on every book search** (`lib/media-api.ts` → `searchBooks`). Open Library needs no key; Google Books uses `GOOGLE_BOOK_API_KEY` (server-side only, free quota about 1000 requests/day). Results are merged and de-duplicated; a book found by both is listed first. Each source has a 6 s timeout (Open Library is often slow), and if one fails the other still answers; the API returns `status` per source so the UI can say which one didn't. With no Google key, search uses Open Library only.
-  - TV: TMDB (`TMDB_API_KEY`, server-side). Footer must show TMDB attribution (done in `app/layout.tsx`).
+  - TV and movies: TMDB (`TMDB_API_KEY`, server-side; `searchTvSeries`, `searchMovies`, `getTvDetails`, `getMovieDetails`). Footer must show TMDB attribution (done in `app/layout.tsx`).
 - **Deploy:** Vercel Hobby.
 
 ---
@@ -53,6 +54,7 @@ Single source of truth for AI agents and humans working in this repo. Read it fu
 - **Spoiler content never leaves the server while locked.** `getFeed` (lib/data.ts) sets `content` **and `title`** to `null` for locked entries before serialization. `getHighlights` is only called with unlocked entry ids. CSS blur is decoration only.
 - **Never trust the client for identity or anchors.** `member_id`, `author_name`, `room_id`, `anchor_unit`, `anchor_label`, quote text and total units are derived on the server from the member cookie, `member_progress` and stored rows. The client sends only `room_code`, `media_id`/`note_id`, `title`, `content`, `tag`, optional chapter, and highlight offsets.
 - **Cover URLs:** search results are allow-listed (`image.tmdb.org`, `covers.openlibrary.org`, `books.google.com`, `books.googleusercontent.com`; see `ALLOWED_COVER_HOSTS`). Never put a Google request URL in an error message: it contains the key. Manual covers are uploaded by the server (JPG/PNG/WebP, max 1 MB) and the URL comes from Storage, never from the client.
+- **Rate limiting** (`lib/rate-limit.ts`, table `rate_events`, SQL function `rate_hit`): per network address (hashed): create room 5/h, join 20/h, name claim 20/h, owner-key attempts 8/h, search 30/min; per member: 30 writes/min (entries, comments, replies, items). **Fails open** if the function is missing, so an old database never breaks the app.
 - Do not call external media APIs on room page loads. Copy metadata into `room_media` once, at add time.
 
 Required `.env.local` (see `.env.example`; the real file is git-ignored):
@@ -63,19 +65,19 @@ TMDB_API_KEY=<TMDB v3 API key>                                 # optional: only 
 GOOGLE_BOOK_API_KEY=<Google Books API key>                     # optional: without it, books use Open Library only
 ```
 
-**Accepted v1 trade-offs:** anyone with the room link can join and can claim any existing nickname ("I'm already here"), so the link *is* the password; no rate limiting yet. Do not use Scenara for sensitive content.
+**Accepted v1 trade-offs:** anyone with the room link can join and can claim any existing nickname ("I'm already here"), so the link *is* the password; light rate limiting (below). Do not use Scenara for sensitive content.
 
 ---
 
 ## 5. Database Schema
 Canonical file: `supabase/schema.sql`. Run it in the Supabase SQL Editor; it is **idempotent** (safe to re-run) and also upgrades older databases with `alter table … add column if not exists`. **Whenever you change the data model, edit this file and tell the user to re-run it.** The agent cannot run DDL.
 
-Contents (v1.5 adds `rooms.owner_key_hash` and `room_members.role`): 8 tables (`rooms`, `room_members`, `shelves`, `room_media`, `member_progress`, `notes`, `note_highlights`, `note_replies`), indexes, RLS, the function `set_book_pages(uuid, int)` (service role only), and the public `covers` bucket.
+Contents (v1.5 adds `rooms.owner_key_hash` and `room_members.role`): 9 tables (`rooms`, `room_members`, `shelves`, `room_media`, `member_progress`, `notes`, `note_highlights`, `note_replies`, `rate_events`), indexes, RLS, the function `set_book_pages(uuid, int)` and `rate_hit(text, int, int)` (both service role only), and the public `covers` bucket.
 
 Rules enforced:
 - `rooms.code`: unique, `^[a-z0-9]{4,16}$`.
 - `room_members`: nickname 1-30 chars, unique per room case-insensitively.
-- `shelves`: `name` 1-40 chars, unique per room (case-insensitive); `kind` `book|tv` (the kind sets the theme); `position` orders the tabs.
+- `shelves`: `name` 1-40 chars, unique per room (case-insensitive); `kind` `book|tv|movie` (the kind sets the theme); `position` orders the tabs.
 - `room_media`: `shelf_id` (which shelf it stands on); unique `(room_id, media_type, external_id)`; `total_units >= 1`; optional `total_pages`, `creator`, `description` (≤2000), `year`, `genres` (comma separated). Manual items use `external_id = 'manual:<uuid>'`.
 - `member_progress`: unique `(member_id, media_id)`; `current_unit >= 0`.
 - `notes`: optional `title` (≤80; the app requires it for new entries); `content` 1-2000; `anchor_unit >= 0`.
@@ -108,6 +110,7 @@ Never silently hide future entries; silence makes rooms feel dead.
 - **collaborator**: additionally may add media (search and manual) and create/rename/delete shelves.
 - **Writing entries and editing an item** (total pages, move shelf): only **who added the item and the owner** (`canEditMedia`, `room_media.added_by`). Everyone else cannot change it.
 - **viewer** (default for every new joiner): read, own progress, highlight comments, replies. UI hides the other controls; the server enforces it (`getAccess(room).canEdit` / `canEditMedia` in `lib/permissions.ts`).
+- **Delete and moderation:** authors delete their own entries, highlight comments and replies; the owner deletes anything and can remove a member (cascades their words and progress; their cookie goes stale). An item is removed by who added it or the owner (cascades its entries). Highlights and replies cascade with their entry. Always with a confirm; the server re-checks (`deleteNote`, `deleteHighlight`, `deleteReply`, `deleteMedia`, `removeMember`). No editing yet.
 - **Reclaiming by name** (`claimMember`) works only for viewers, and the join prompt only receives viewer ids; otherwise anyone with the link could become a collaborator by picking its name.
 - **Legacy rooms** (made before v1.5): existing members become collaborators (column default), there is no owner, and any member may "Claim room" once (`claimOwnership`).
 - Loading UI: `components/skeleton.tsx` (`Skeleton`, `Spinner`), `room-skeleton.tsx` (room and modal skeletons used as `Suspense` fallbacks), `link-pending.tsx` (pulse on a link while its page loads).
@@ -180,7 +183,7 @@ lib/
 supabase/schema.sql                 canonical DB setup
 ```
 
-**Server Actions** (`lib/actions.ts`): `createRoom`, `joinRoom`, `claimMember`, `recoverOwner`, `claimOwnership`, `setMemberRole`, `createShelf`, `renameShelf`, `deleteShelf`, `moveMedia`, `addMedia` (from search), `addManualMedia`, `updateProgress`, `setBookPages`, `addNote`, `addHighlight`, `addReply`. Each re-derives the member from the cookie and validates with Zod. Mutations call `revalidatePath` (`/room/<code>`, `"layout"` for progress/notes/highlights so the open modal refreshes).
+**Server Actions** (`lib/actions.ts`): `createRoom`, `joinRoom`, `claimMember`, `recoverOwner`, `claimOwnership`, `setMemberRole`, `createShelf`, `renameShelf`, `deleteShelf`, `moveMedia`, `addMedia` (from search), `addManualMedia`, `updateProgress`, `setBookPages`, `addNote`, `addHighlight`, `addReply`, `deleteNote`, `deleteHighlight`, `deleteReply`, `deleteMedia`, `removeMember`. Each re-derives the member from the cookie and validates with Zod. Mutations call `revalidatePath` (`/room/<code>`, `"layout"` for progress/notes/highlights so the open modal refreshes).
 
 ---
 
@@ -246,10 +249,10 @@ The table lists light values unless a dark value is shown; every token has a dar
 
 **Gotchas:** `next.config.ts` must not contain `output: "export"` (breaks the build; GitHub Pages cannot run this app). Fetch memoization is bypassed in `lib/supabase-server.ts`.
 
-**Next step:** delete/moderation, rate limiting, then the activity timeline (ask the owner before building public rooms).
+**Delete/moderation** verified in the browser (16/16). **Movies** verified (12/12: shelf, TMDB add with runtime and director, minute progress and lock, manual add). **Rate limiting** verified live (`rate_hit` true/true/false; `/api/search` returns 429 after about 30 requests a minute). **Next step:** none planned. Timeline and public rooms are shelved by the owner (not needed for now).
 
 ---
 
 ## 12. Roadmap
 - **Done:** blue brand + dark mode + animated landing page, scaffold, search API, demo, identity cookie, rooms, add media, progress, gated entries, redesign, shelf + modal, highlight comments, entry titles, page tracking, media details, manual add.
-- **Later:** rate limiting; edit/delete own entries and comments; per-season TV progress (`S01E04`); edit media details after adding; warm dark theme; a real test suite in the repo.
+- **Later:** edit own entries and comments; per-season TV progress (`S01E04`); edit media details after adding; warm dark theme; a real test suite in the repo.

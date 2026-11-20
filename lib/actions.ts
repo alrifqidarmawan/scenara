@@ -4,9 +4,10 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { getCurrentMember, getMedia, getMyUnit, getRoomByCode, getShelf, isUuid } from "./data";
-import { getBookDetails, getTvDetails } from "./media-api";
+import { getBookDetails, getMovieDetails, getTvDetails } from "./media-api";
 import { canEditMedia, generateOwnerKey, getAccess, hashKey, keyMatches, readOwnerKey, writeOwnerKey } from "./permissions";
 import { writeMemberId } from "./session";
+import { TOO_FAST, ipLimit, writeLimit } from "./rate-limit";
 import { SETUP_HINT, getSupabase, isSupabaseConfigured } from "./supabase-server";
 import { ALLOWED_COVER_HOSTS, formatUnitLabel, isNoteUnlocked, type Note } from "./types";
 
@@ -51,6 +52,7 @@ export async function createRoom(
   if (!isSupabaseConfigured()) {
     return { error: SETUP_HINT };
   }
+  if (!(await ipLimit("create", 5, 3600))) return { error: TOO_FAST };
 
   const supabase = getSupabase();
 
@@ -101,6 +103,7 @@ export async function joinRoom(
   });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid name." };
 
+  if (!(await ipLimit("join", 20, 3600))) return { error: TOO_FAST };
   const room = await getRoomByCode(parsed.data.room_code);
   if (!room) return { error: "This room no longer exists." };
 
@@ -134,6 +137,7 @@ export async function joinRoom(
 
 /** Reclaim an existing nickname, e.g. when returning on another device. */
 export async function claimMember(roomCode: string, memberId: string): Promise<ActionState> {
+  if (!(await ipLimit("claim", 20, 3600))) return { error: TOO_FAST };
   const room = await getRoomByCode(roomCode);
   if (!room || !isUuid(memberId)) return { error: "Could not find that member." };
 
@@ -156,6 +160,8 @@ export async function claimMember(roomCode: string, memberId: string): Promise<A
 
 /** Another device: enter the owner key to become the owner again. */
 export async function recoverOwner(roomCode: string, key: string): Promise<ActionState> {
+  // The key is the only secret: slow down guessing hard.
+  if (!(await ipLimit("recover", 8, 3600))) return { error: TOO_FAST };
   const room = await getRoomByCode(roomCode);
   if (!room || !keyMatches(room, key)) return { error: "That owner key doesn't match this room." };
 
@@ -230,7 +236,7 @@ export async function setMemberRole(
 
 const addMediaSchema = z.object({
   room_code: z.string().min(1),
-  media_type: z.enum(["tv", "book"]),
+  media_type: z.enum(["tv", "book", "movie"]),
   external_id: z.string().min(1).max(64),
   title: z.string().trim().min(1).max(300),
   cover_url: z
@@ -272,11 +278,12 @@ export async function addMedia(
   const access = await getAccess(room);
   if (!access) return { error: NOT_JOINED };
   if (!access.canEdit) return { error: NOT_ALLOWED };
+  if (!(await writeLimit(access.member.id))) return { error: TOO_FAST };
 
   const shelf = await getShelf(room, input.shelf_id);
   if (!shelf) return { error: "That shelf no longer exists." };
   if (shelf.kind !== input.media_type) {
-    return { error: `"${shelf.name}" is a ${shelf.kind === "book" ? "book" : "show"} shelf.` };
+    return { error: `"${shelf.name}" is a ${shelf.kind === "book" ? "book" : shelf.kind === "movie" ? "movie" : "show"} shelf.` };
   }
 
   // Total units come from the server, never from the form: books are a
@@ -290,7 +297,19 @@ export async function addMedia(
   let description: string | null = null;
   let genres: string | null = null;
 
-  if (input.media_type === "tv") {
+  if (input.media_type === "movie") {
+    try {
+      const movie = await getMovieDetails(input.external_id);
+      totalUnits = movie.minutes;
+      creator = movie.creator ?? creator;
+      year = movie.year ?? year;
+      description = movie.description;
+      genres = movie.genres;
+    } catch (err) {
+      return { error: err instanceof Error ? err.message : "Could not look up that movie." };
+    }
+    if (totalUnits < 1) return { error: "TMDB has no runtime for this movie yet. Add it manually with its length." };
+  } else if (input.media_type === "tv") {
     try {
       const tv = await getTvDetails(input.external_id);
       totalUnits = tv.episodes;
@@ -423,6 +442,7 @@ export async function addNote(
   const access = room && (await getAccess(room));
   if (!room || !access) return { error: NOT_JOINED };
   if (!access.canEdit) return { error: NOT_ALLOWED };
+  if (!(await writeLimit(access.member.id))) return { error: TOO_FAST };
   const member = access.member;
 
   const media = await getMedia(room, input.media_id);
@@ -490,6 +510,7 @@ export async function addHighlight(input: {
   const room = await getRoomByCode(parsed.data.room_code);
   const member = room && (await getCurrentMember(room)); // every member may comment
   if (!room || !member) return { error: NOT_JOINED };
+  if (!(await writeLimit(member.id))) return { error: TOO_FAST };
 
   const supabase = getSupabase();
   const { data } = await supabase
@@ -556,6 +577,7 @@ export async function addReply(input: {
   const room = await getRoomByCode(parsed.data.room_code);
   const member = room && (await getCurrentMember(room)); // every member may reply
   if (!room || !member) return { error: NOT_JOINED };
+  if (!(await writeLimit(member.id))) return { error: TOO_FAST };
 
   const supabase = getSupabase();
   const { data } = await supabase.from("notes").select().eq("id", note_id).eq("room_id", room.id).maybeSingle();
@@ -617,6 +639,7 @@ export async function setBookPages(
   const access = room && (await getAccess(room));
   if (!room || !access) return { error: NOT_JOINED };
   if (!access.canEdit) return { error: NOT_ALLOWED };
+  if (!(await writeLimit(access.member.id))) return { error: TOO_FAST };
 
   const media = await getMedia(room, parsed.data.media_id);
   if (!media || media.media_type !== "book") return { error: "Book not found." };
@@ -652,7 +675,7 @@ const optionalInt = (min: number, max: number) =>
 
 const manualSchema = z.object({
   room_code: z.string().min(1),
-  media_type: z.enum(["tv", "book"]),
+  media_type: z.enum(["tv", "book", "movie"]),
   title: z.string().trim().min(1, "Enter a title.").max(200, "Keep the title under 200 characters."),
   creator: z.string().trim().max(200).optional(),
   year: optionalInt(1, 3000),
@@ -660,6 +683,7 @@ const manualSchema = z.object({
   description: z.string().trim().max(2000, "Keep the description under 2000 characters.").optional(),
   pages: optionalInt(1, 10000),
   episodes: optionalInt(1, 5000),
+  minutes: optionalInt(1, 1500),
   shelf_id: z.string().uuid(),
 });
 
@@ -675,17 +699,21 @@ export async function addManualMedia(
   if (input.media_type === "tv" && !input.episodes) {
     return { error: "Enter how many episodes it has." };
   }
+  if (input.media_type === "movie" && !input.minutes) {
+    return { error: "Enter how long the movie is, in minutes." };
+  }
 
   const room = await getRoomByCode(input.room_code);
   if (!room) return { error: "This room no longer exists." };
   const access = await getAccess(room);
   if (!access) return { error: NOT_JOINED };
   if (!access.canEdit) return { error: NOT_ALLOWED };
+  if (!(await writeLimit(access.member.id))) return { error: TOO_FAST };
 
   const shelf = await getShelf(room, input.shelf_id);
   if (!shelf) return { error: "That shelf no longer exists." };
   if (shelf.kind !== input.media_type) {
-    return { error: `"${shelf.name}" is a ${shelf.kind === "book" ? "book" : "show"} shelf.` };
+    return { error: `"${shelf.name}" is a ${shelf.kind === "book" ? "book" : shelf.kind === "movie" ? "movie" : "show"} shelf.` };
   }
 
   const supabase = getSupabase();
@@ -718,7 +746,7 @@ export async function addManualMedia(
     external_id: `manual:${crypto.randomUUID()}`,
     title: input.title,
     cover_url: coverUrl,
-    total_units: isBook ? (input.pages ?? 100) : input.episodes,
+    total_units: isBook ? (input.pages ?? 100) : input.media_type === "movie" ? input.minutes : input.episodes,
     total_pages: isBook ? (input.pages ?? null) : null,
     creator: input.creator || null,
     year: input.year ?? null,
@@ -753,11 +781,11 @@ async function requireEditor(roomCode: string) {
 export async function createShelf(
   roomCode: string,
   name: string,
-  kind: "book" | "tv",
+  kind: "book" | "tv" | "movie",
 ): Promise<ActionState> {
   const parsedName = shelfNameSchema.safeParse(name);
   if (!parsedName.success) return { error: parsedName.error.issues[0]?.message ?? "Invalid name." };
-  if (kind !== "book" && kind !== "tv") return { error: "Pick books or shows." };
+  if (kind !== "book" && kind !== "tv" && kind !== "movie") return { error: "Pick books, shows or movies." };
 
   const room = await requireEditor(roomCode);
   if (!room) return { error: NOT_ALLOWED };
@@ -837,5 +865,115 @@ export async function moveMedia(roomCode: string, mediaId: string, shelfId: stri
   if (error) return { error: error.message };
 
   revalidatePath(`/room/${room.code}`, "layout");
+  return { ok: true };
+}
+
+// ---------------------------------------------------------------------------
+// Delete and moderation (CLAUDE.md §6H). Authors remove their own words; the
+// owner can remove anything; an item can be removed by who added it or the owner.
+// ---------------------------------------------------------------------------
+
+/** The current member, plus whether they may remove something written by `authorId`. */
+async function moderationContext(roomCode: string) {
+  const room = await getRoomByCode(roomCode);
+  const access = room && (await getAccess(room));
+  if (!room || !access) return null;
+  return { room, access, canRemove: (authorId: string | null) => access.isOwner || authorId === access.member.id };
+}
+
+const idSchema = z.string().uuid();
+
+export async function deleteNote(roomCode: string, noteId: string): Promise<ActionState> {
+  if (!idSchema.safeParse(noteId).success) return { error: "Entry not found." };
+  const ctx = await moderationContext(roomCode);
+  if (!ctx) return { error: NOT_JOINED };
+
+  const supabase = getSupabase();
+  const { data } = await supabase.from("notes").select("id, member_id").eq("id", noteId).eq("room_id", ctx.room.id).maybeSingle();
+  const note = data as { id: string; member_id: string } | null;
+  if (!note) return { error: "Entry not found." };
+  if (!ctx.canRemove(note.member_id)) return { error: "Only the author or the owner can remove this." };
+
+  const { error } = await supabase.from("notes").delete().eq("id", note.id); // highlights and replies cascade
+  if (error) return { error: error.message };
+  revalidatePath(`/room/${ctx.room.code}`, "layout");
+  return { ok: true };
+}
+
+export async function deleteHighlight(roomCode: string, highlightId: string): Promise<ActionState> {
+  if (!idSchema.safeParse(highlightId).success) return { error: "Comment not found." };
+  const ctx = await moderationContext(roomCode);
+  if (!ctx) return { error: NOT_JOINED };
+
+  const supabase = getSupabase();
+  const { data } = await supabase
+    .from("note_highlights")
+    .select("id, member_id, notes!inner(room_id)")
+    .eq("id", highlightId)
+    .eq("notes.room_id", ctx.room.id)
+    .maybeSingle();
+  const hl = data as { id: string; member_id: string } | null;
+  if (!hl) return { error: "Comment not found." };
+  if (!ctx.canRemove(hl.member_id)) return { error: "Only the author or the owner can remove this." };
+
+  const { error } = await supabase.from("note_highlights").delete().eq("id", hl.id); // its replies cascade
+  if (error) return { error: error.message };
+  revalidatePath(`/room/${ctx.room.code}`, "layout");
+  return { ok: true };
+}
+
+export async function deleteReply(roomCode: string, replyId: string): Promise<ActionState> {
+  if (!idSchema.safeParse(replyId).success) return { error: "Reply not found." };
+  const ctx = await moderationContext(roomCode);
+  if (!ctx) return { error: NOT_JOINED };
+
+  const supabase = getSupabase();
+  const { data } = await supabase
+    .from("note_replies")
+    .select("id, member_id, notes!inner(room_id)")
+    .eq("id", replyId)
+    .eq("notes.room_id", ctx.room.id)
+    .maybeSingle();
+  const reply = data as { id: string; member_id: string } | null;
+  if (!reply) return { error: "Reply not found." };
+  if (!ctx.canRemove(reply.member_id)) return { error: "Only the author or the owner can remove this." };
+
+  const { error } = await supabase.from("note_replies").delete().eq("id", reply.id);
+  if (error) return { error: error.message };
+  revalidatePath(`/room/${ctx.room.code}`, "layout");
+  return { ok: true };
+}
+
+/** Remove a book or show with all its entries and progress. Who added it, or the owner. */
+export async function deleteMedia(roomCode: string, mediaId: string): Promise<ActionState> {
+  const ctx = await moderationContext(roomCode);
+  if (!ctx) return { error: NOT_JOINED };
+  const media = await getMedia(ctx.room, mediaId);
+  if (!media) return { error: "Not found." };
+  if (!canEditMedia(ctx.access, media)) return { error: "Only who added this, or the owner, can remove it." };
+
+  const { error } = await getSupabase().from("room_media").delete().eq("id", media.id);
+  if (error) return { error: error.message };
+  revalidatePath(`/room/${ctx.room.code}`, "layout");
+  return { ok: true };
+}
+
+/** Owner only: remove a member and everything they wrote or progressed. */
+export async function removeMember(roomCode: string, memberId: string): Promise<ActionState> {
+  const ctx = await moderationContext(roomCode);
+  if (!ctx) return { error: NOT_JOINED };
+  if (!ctx.access.isOwner) return { error: "Only the owner can remove members." };
+  if (!idSchema.safeParse(memberId).success) return { error: "Could not find that member." };
+
+  const { data, error } = await getSupabase()
+    .from("room_members")
+    .delete()
+    .eq("id", memberId)
+    .eq("room_id", ctx.room.id)
+    .neq("role", "owner")
+    .select("id");
+  if (error) return { error: error.message };
+  if (!data?.length) return { error: "Could not remove that member." };
+  revalidatePath(`/room/${ctx.room.code}`, "layout");
   return { ok: true };
 }

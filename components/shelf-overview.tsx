@@ -1,8 +1,8 @@
 import Link from "next/link";
-import { BookOpen, ChevronRight, Tv } from "lucide-react";
+import { BookOpen, ChevronRight, Film, Tv } from "lucide-react";
 import { Cover } from "./cover";
 import { ShelfPlant } from "./shelf-plant";
-import type { RoomMedia, Shelf } from "@/lib/types";
+import { shelfTheme, type RoomMedia, type Shelf } from "@/lib/types";
 
 const MAX_COVERS = 9;
 
@@ -25,7 +25,7 @@ export function ShelfOverview({
         const items = itemsByShelf[shelf.id] ?? [];
         const shown = items.slice(0, MAX_COVERS);
         const more = items.length - shown.length;
-        const Icon = shelf.kind === "book" ? BookOpen : Tv;
+        const Icon = shelf.kind === "book" ? BookOpen : shelf.kind === "movie" ? Film : Tv;
 
         return (
           <li key={shelf.id}>
@@ -57,7 +57,7 @@ export function ShelfOverview({
                 {more > 0 && <span className="mb-1 shrink-0 text-sm text-muted">+{more}</span>}
                 {items.length === 0 && <span className="mb-2 text-sm text-muted">Empty shelf</span>}
                 <span aria-hidden="true" className="ml-auto block h-16 w-12 shrink-0">
-                  <ShelfPlant kind={(row % 3) as 0 | 1 | 2} theme={shelf.kind} />
+                  <ShelfPlant kind={(row % 3) as 0 | 1 | 2} theme={shelfTheme(shelf.kind)} />
                 </span>
               </div>
               <div

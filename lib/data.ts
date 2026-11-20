@@ -115,6 +115,7 @@ export async function getFeed(mediaId: string, myUnit: number): Promise<FeedNote
     const isUnlocked = isNoteUnlocked(n, myUnit);
     return {
       id: n.id,
+      member_id: n.member_id,
       created_at: n.created_at,
       author_name: n.author_name,
       anchor_unit: n.anchor_unit,
@@ -181,7 +182,7 @@ async function listShelves(roomId: string): Promise<Shelf[]> {
  * brand-new room at the same moment, both try to create the defaults and the unique
  * index makes the loser a harmless no-op.
  */
-async function insertShelfIgnoringDuplicate(room: Room, name: string, kind: "book" | "tv", position: number) {
+async function insertShelfIgnoringDuplicate(room: Room, name: string, kind: "book" | "tv" | "movie", position: number) {
   await getSupabase().from("shelves").insert({ room_id: room.id, name, kind, position });
 }
 

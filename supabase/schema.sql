@@ -1,4 +1,4 @@
--- Scenara — MVP v1.5 schema (CLAUDE.md §5): 8 tables + a public `covers` storage bucket.
+-- Scenara — MVP v1.5 schema (CLAUDE.md §5): 9 tables + a public `covers` storage bucket.
 -- Run in the Supabase SQL Editor (Dashboard → SQL → New query).
 -- Idempotent: safe to re-run. Tables use `if not exists`; indexes use `if not exists`;
 -- enabling RLS twice is a no-op.
@@ -25,7 +25,7 @@ create table if not exists shelves (
   id uuid primary key default gen_random_uuid(),
   room_id uuid not null references rooms(id) on delete cascade,
   name text not null check (char_length(name) between 1 and 40),
-  kind text not null check (kind in ('book', 'tv')),
+  kind text not null check (kind in ('book', 'tv', 'movie')),
   position int not null default 0,
   created_at timestamptz default now()
 );
@@ -34,7 +34,7 @@ create table if not exists shelves (
 create table if not exists room_media (
   id uuid primary key default gen_random_uuid(),
   room_id uuid not null references rooms(id) on delete cascade,
-  media_type text not null check (media_type in ('tv', 'book')),
+  media_type text not null check (media_type in ('tv', 'book', 'movie')),
   external_id text not null,
   title text not null,
   cover_url text,
@@ -100,6 +100,14 @@ create table if not exists note_replies (
   created_at timestamptz default now()
 );
 
+-- 8. Rate limiting (v1.5): one row per counted action, e.g. key 'w:<member id>' or 'ip:<hash>:join'.
+--    Rows older than a day are swept away occasionally by rate_hit itself.
+create table if not exists rate_events (
+  id bigint generated always as identity primary key,
+  key text not null,
+  created_at timestamptz not null default now()
+);
+
 -- Upgrades for databases created before v1.2 (no-ops on fresh installs) ---------
 alter table room_media add column if not exists total_pages int check (total_pages is null or total_pages >= 1);
 alter table notes add column if not exists title text check (title is null or char_length(title) <= 80);
@@ -109,6 +117,13 @@ alter table room_media add column if not exists year int check (year is null or 
 alter table room_media add column if not exists genres text check (genres is null or char_length(genres) <= 200);
 
 alter table room_media add column if not exists shelf_id uuid references shelves(id) on delete set null;
+
+-- Movies (v1.5): allow the 'movie' kind on databases created before it existed.
+-- total_units for a movie is its runtime in minutes.
+alter table shelves drop constraint if exists shelves_kind_check;
+alter table shelves add constraint shelves_kind_check check (kind in ('book', 'tv', 'movie'));
+alter table room_media drop constraint if exists room_media_media_type_check;
+alter table room_media add constraint room_media_media_type_check check (media_type in ('tv', 'book', 'movie'));
 
 -- v1.5 roles. The owner proves ownership with a secret key (only its SHA-256 is stored);
 -- members are 'owner', 'collaborator' (can add and edit) or 'viewer' (read + own progress).
@@ -164,6 +179,29 @@ $$;
 -- Only the server (service role) may call it.
 revoke all on function set_book_pages(uuid, int) from public, anon, authenticated;
 
+-- Count-then-record in one call: returns false (and records nothing) once `p_key` has been hit
+-- `p_max` times within the last `p_window_seconds`. Only the server (service role) may call it.
+create or replace function rate_hit(p_key text, p_max int, p_window_seconds int)
+returns boolean
+language plpgsql
+as $$
+declare
+  n int;
+begin
+  if random() < 0.02 then
+    delete from rate_events where created_at < now() - interval '1 day';
+  end if;
+  select count(*) into n from rate_events
+   where key = p_key and created_at > now() - make_interval(secs => p_window_seconds);
+  if n >= p_max then
+    return false;
+  end if;
+  insert into rate_events (key) values (p_key);
+  return true;
+end;
+$$;
+revoke all on function rate_hit(text, int, int) from public, anon, authenticated;
+
 -- Indexes ------------------------------------------------------------------
 create unique index if not exists room_members_nickname_uniq
   on room_members (room_id, lower(nickname));
@@ -177,6 +215,7 @@ create index if not exists member_progress_media_idx on member_progress (media_i
 create index if not exists notes_media_anchor_idx on notes (media_id, anchor_unit desc);
 create index if not exists note_highlights_note_idx on note_highlights (note_id);
 create index if not exists note_replies_note_idx on note_replies (note_id, created_at);
+create index if not exists rate_events_key_idx on rate_events (key, created_at desc);
 
 -- Security -----------------------------------------------------------------
 -- v1 has no Supabase Auth: the app talks to these tables with the service role
@@ -190,6 +229,7 @@ alter table shelves         enable row level security;
 alter table notes           enable row level security;
 alter table note_highlights enable row level security;
 alter table note_replies    enable row level security;
+alter table rate_events     enable row level security;
 
 -- Cover uploads (manual add) ----------------------------------------------
 -- Public bucket: covers are shown to anyone with the room link. Uploads happen only

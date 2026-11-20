@@ -1,5 +1,5 @@
 import Image from "next/image";
-import { BookOpen, Tv } from "lucide-react";
+import { BookOpen, Film, Tv } from "lucide-react";
 import type { MediaType } from "@/lib/types";
 
 /**
@@ -19,7 +19,7 @@ export function Cover({
   className?: string;
 }) {
   if (!url) {
-    const Icon = mediaType === "book" ? BookOpen : Tv;
+    const Icon = mediaType === "book" ? BookOpen : mediaType === "movie" ? Film : Tv;
     return (
       <div
         className={`flex shrink-0 items-center justify-center rounded-xl bg-brand-soft text-brand-ink ${className}`}

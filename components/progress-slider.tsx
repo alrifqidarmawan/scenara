@@ -2,11 +2,12 @@
 
 import { useState } from "react";
 import { Minus, Plus } from "lucide-react";
-import { formatUnitLabel, type MediaType } from "@/lib/types";
+import { formatRuntime, formatUnitLabel, type MediaType } from "@/lib/types";
 
 /**
  * Progress control (CLAUDE.md §2 "Progress Units").
  * - TV:    episode stepper, integer 0..total_units (0 = not started)
+ * - Movie: minutes watched, 0..runtime (slider + exact minutes)
  * - Books: page slider + exact page input when the page count is known,
  *          otherwise a 0..100 percentage
  *
@@ -30,11 +31,13 @@ export function ProgressSlider({
   const [draft, setDraft] = useState<string | null>(null);
   const max = totalUnits;
   const clamp = (n: number) => Math.max(0, Math.min(max, Math.round(n)));
-  const unitName = mediaType === "tv" ? "Episode" : usesPages ? "Page" : "Percent";
+  const unitName = mediaType === "tv" ? "Episode" : mediaType === "movie" ? "Minute" : usesPages ? "Page" : "Percent";
   const label =
-    value === 0 && mediaType === "tv"
+    value === 0 && mediaType !== "book"
       ? "Not started"
-      : usesPages
+      : mediaType === "movie"
+        ? `${formatRuntime(value)} / ${formatRuntime(max)}`
+        : usesPages
         ? `p. ${value} / ${max}`
         : formatUnitLabel(mediaType, value);
 
@@ -42,7 +45,7 @@ export function ProgressSlider({
     <div className="space-y-4">
       <div className="flex items-baseline justify-between gap-3">
         <span className="eyebrow">
-          {mediaType === "book" ? "Where are you?" : "Last episode watched"}
+          {mediaType === "book" ? "Where are you?" : mediaType === "movie" ? "How far did you watch?" : "Last episode watched"}
         </span>
         <span className="font-display text-2xl tabular-nums">
           {label}
@@ -88,7 +91,7 @@ export function ProgressSlider({
 
       {/* Exact entry for people who know the number (or are too lazy to drag). */}
       <label className="flex items-center gap-2 text-sm text-muted">
-        <span>Or type {mediaType === "tv" ? "the episode" : usesPages ? "your page" : "a percent"}:</span>
+        <span>Or type {mediaType === "tv" ? "the episode" : mediaType === "movie" ? "the minute" : usesPages ? "your page" : "a percent"}:</span>
         <input
           type="number"
           inputMode="numeric"
@@ -111,7 +114,9 @@ export function ProgressSlider({
       <p className="text-xs text-muted">
         {mediaType === "tv"
           ? `Out of ${max} episodes. Notes past this point stay locked.`
-          : `Entries anchored past this ${usesPages ? "page" : "percentage"} stay locked.`}
+          : mediaType === "movie"
+            ? `Out of ${formatRuntime(max)}. Entries past this minute stay locked.`
+            : `Entries anchored past this ${usesPages ? "page" : "percentage"} stay locked.`}
       </p>
     </div>
   );
