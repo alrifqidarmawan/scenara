@@ -1,4 +1,4 @@
--- Scenara — MVP v1.5 schema (CLAUDE.md §5): 7 tables + a public `covers` storage bucket.
+-- Scenara — MVP v1.5 schema (CLAUDE.md §5): 8 tables + a public `covers` storage bucket.
 -- Run in the Supabase SQL Editor (Dashboard → SQL → New query).
 -- Idempotent: safe to re-run. Tables use `if not exists`; indexes use `if not exists`;
 -- enabling RLS twice is a no-op.
@@ -88,6 +88,18 @@ create table if not exists note_highlights (
   check (end_offset > start_offset)
 );
 
+-- 7. Replies (v1.5): a flat reply under an entry (highlight_id null) or under a highlight comment.
+--    One level only, no nesting. Anyone in the room may reply to what they can read.
+create table if not exists note_replies (
+  id uuid primary key default gen_random_uuid(),
+  note_id uuid not null references notes(id) on delete cascade,
+  highlight_id uuid references note_highlights(id) on delete cascade,
+  member_id uuid not null references room_members(id) on delete cascade,
+  author_name text not null,
+  content text not null check (char_length(content) between 1 and 500),
+  created_at timestamptz default now()
+);
+
 -- Upgrades for databases created before v1.2 (no-ops on fresh installs) ---------
 alter table room_media add column if not exists total_pages int check (total_pages is null or total_pages >= 1);
 alter table notes add column if not exists title text check (title is null or char_length(title) <= 80);
@@ -164,6 +176,7 @@ create index if not exists room_media_shelf_idx on room_media (shelf_id);
 create index if not exists member_progress_media_idx on member_progress (media_id);
 create index if not exists notes_media_anchor_idx on notes (media_id, anchor_unit desc);
 create index if not exists note_highlights_note_idx on note_highlights (note_id);
+create index if not exists note_replies_note_idx on note_replies (note_id, created_at);
 
 -- Security -----------------------------------------------------------------
 -- v1 has no Supabase Auth: the app talks to these tables with the service role
@@ -176,6 +189,7 @@ alter table member_progress enable row level security;
 alter table shelves         enable row level security;
 alter table notes           enable row level security;
 alter table note_highlights enable row level security;
+alter table note_replies    enable row level security;
 
 -- Cover uploads (manual add) ----------------------------------------------
 -- Public bucket: covers are shown to anyone with the room link. Uploads happen only

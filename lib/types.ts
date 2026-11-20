@@ -106,6 +106,17 @@ export interface Highlight {
   created_at: string;
 }
 
+/** note_replies — flat, one level: under an entry (highlight_id null) or under a highlight comment. */
+export interface Reply {
+  id: string;
+  note_id: string;
+  highlight_id: string | null;
+  member_id: string;
+  author_name: string;
+  content: string;
+  created_at: string;
+}
+
 /**
  * The subset of a note the card UI needs. Also handy for demo/seed data.
  * `content` and `title` are `null` when the note is locked: the server strips

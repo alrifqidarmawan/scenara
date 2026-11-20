@@ -427,6 +427,9 @@ export async function addNote(
 
   const media = await getMedia(room, input.media_id);
   if (!media) return { error: "Media not found." };
+  if (!canEditMedia(access, media)) {
+    return { error: "Only who added this, or the owner, can write entries. You can comment on highlights and reply." };
+  }
 
   // Anchor to where the author actually is — a client can't post "from the future".
   const anchorUnit = await getMyUnit(member.id, media.id);
@@ -485,10 +488,8 @@ export async function addHighlight(input: {
   const { note_id, start, end, comment } = parsed.data;
 
   const room = await getRoomByCode(parsed.data.room_code);
-  const access = room && (await getAccess(room));
-  if (!room || !access) return { error: NOT_JOINED };
-  if (!access.canEdit) return { error: NOT_ALLOWED };
-  const member = access.member;
+  const member = room && (await getCurrentMember(room)); // every member may comment
+  if (!room || !member) return { error: NOT_JOINED };
 
   const supabase = getSupabase();
   const { data } = await supabase
@@ -521,6 +522,73 @@ export async function addHighlight(input: {
     comment,
   });
   if (error) return { error: error.message };
+
+  revalidatePath(`/room/${room.code}`, "layout");
+  return { ok: true };
+}
+
+// ---------------------------------------------------------------------------
+// Replies — flat, one level, under an entry or a highlight comment
+// ---------------------------------------------------------------------------
+
+const replySchema = z.object({
+  room_code: z.string().min(1),
+  note_id: z.string().uuid(),
+  highlight_id: z.string().uuid().nullable(),
+  content: z.string().trim().min(1, "Write a reply first.").max(500, "Keep replies under 500 characters."),
+});
+
+export async function addReply(input: {
+  roomCode: string;
+  noteId: string;
+  highlightId: string | null;
+  content: string;
+}): Promise<ActionState> {
+  const parsed = replySchema.safeParse({
+    room_code: input.roomCode,
+    note_id: input.noteId,
+    highlight_id: input.highlightId,
+    content: input.content,
+  });
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid reply." };
+  const { note_id, highlight_id, content } = parsed.data;
+
+  const room = await getRoomByCode(parsed.data.room_code);
+  const member = room && (await getCurrentMember(room)); // every member may reply
+  if (!room || !member) return { error: NOT_JOINED };
+
+  const supabase = getSupabase();
+  const { data } = await supabase.from("notes").select().eq("id", note_id).eq("room_id", room.id).maybeSingle();
+  const note = data as Note | null;
+  if (!note) return { error: "Entry not found." };
+  if (!isNoteUnlocked(note, await getMyUnit(member.id, note.media_id))) {
+    return { error: "That entry is still locked for you." };
+  }
+
+  if (highlight_id) {
+    const { data: hl } = await supabase
+      .from("note_highlights")
+      .select("id")
+      .eq("id", highlight_id)
+      .eq("note_id", note.id)
+      .maybeSingle();
+    if (!hl) return { error: "That comment no longer exists." };
+  }
+
+  const { error } = await supabase.from("note_replies").insert({
+    note_id: note.id,
+    highlight_id,
+    member_id: member.id,
+    author_name: member.nickname,
+    content,
+  });
+  if (error) {
+    return {
+      error: error.message.includes("note_replies")
+        ? "Replies need a database update. Re-run supabase/schema.sql."
+        : error.message,
+    };
+  }
 
   revalidatePath(`/room/${room.code}`, "layout");
   return { ok: true };

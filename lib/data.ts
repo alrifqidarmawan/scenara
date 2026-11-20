@@ -8,6 +8,7 @@ import {
   type Highlight,
   type MemberProgress,
   type Note,
+  type Reply,
   type Room,
   type RoomMedia,
   type RoomMember,
@@ -139,6 +140,17 @@ export async function getHighlights(unlockedNoteIds: string[]): Promise<Highligh
     .in("note_id", unlockedNoteIds)
     .order("start_offset");
   return (data as Highlight[]) ?? [];
+}
+
+/** Replies for the given notes. Callers pass only UNLOCKED note ids, like getHighlights. */
+export async function getReplies(unlockedNoteIds: string[]): Promise<Reply[]> {
+  if (unlockedNoteIds.length === 0) return [];
+  const { data } = await getSupabase()
+    .from("note_replies")
+    .select()
+    .in("note_id", unlockedNoteIds)
+    .order("created_at");
+  return (data as Reply[]) ?? [];
 }
 
 const DEFAULT_SHELF_NAME = { book: "Books", tv: "Shows" } as const;

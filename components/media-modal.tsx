@@ -14,6 +14,7 @@ import {
   formatMediaUnit,
   type FeedNote,
   type Highlight,
+  type Reply,
   type RoomMedia,
 } from "@/lib/types";
 
@@ -36,11 +37,11 @@ export function MediaModal({
   shelves,
   myUnit,
   memberName,
-  canEdit,
   canEditItem,
   others,
   feed,
   highlights,
+  replies,
 }: {
   roomCode: string;
   roomPath: string;
@@ -49,13 +50,12 @@ export function MediaModal({
   shelves: { id: string; name: string }[];
   myUnit: number;
   memberName: string;
-  /** Owner or collaborator. Viewers read and move their own progress only. */
-  canEdit: boolean;
   /** May edit the item itself (pages, shelf): who added it, or the owner. */
   canEditItem: boolean;
   others: { name: string; unit: number }[];
   feed: FeedNote[];
   highlights: Highlight[];
+  replies: Reply[];
 }) {
   const router = useRouter();
   const closeRef = useRef<HTMLButtonElement>(null);
@@ -195,14 +195,14 @@ export function MediaModal({
               roomCode={roomCode}
               note={selected as FeedNote & { content: string }}
               highlights={highlights.filter((h) => h.note_id === selected.id)}
-              canComment={canEdit}
+              replies={replies.filter((r) => r.note_id === selected.id)}
               onBack={() => setSelectedId(null)}
             />
           ) : (
             <>
               <div className="flex items-center justify-between gap-3 pr-10">
                 <h3 className="font-display text-xl">{isBook ? "Chapters & reviews" : "Episodes & reviews"}</h3>
-                {canEdit && (
+                {canEditItem && (
                   <button type="button" onClick={() => setWriting((w) => !w)} className="btn-primary min-h-9 px-4">
                     <PenLine className="h-4 w-4" aria-hidden="true" />
                     {writing ? "Close" : "Write"}
@@ -210,13 +210,13 @@ export function MediaModal({
                 )}
               </div>
 
-              {!canEdit && (
+              {!canEditItem && (
                 <p className="text-xs text-muted">
-                  You&apos;re a viewer: you can read and set your progress. Ask the owner to make you a collaborator to write.
+                  Open an entry to comment on its lines or reply. Only who added this {isBook ? "book" : "show"}, and the owner, can write entries.
                 </p>
               )}
 
-              {canEdit && writing && (
+              {canEditItem && writing && (
                 <NoteComposer
                   roomCode={roomCode}
                   mediaId={media.id}
@@ -235,7 +235,7 @@ export function MediaModal({
               )}
 
               {entries.length === 0 ? (
-                <p className="empty">{canEdit ? "No entries yet. Be the first to write one." : "No entries yet."}</p>
+                <p className="empty">{canEditItem ? "No entries yet. Be the first to write one." : "No entries yet."}</p>
               ) : (
                 <ul className="space-y-2.5">
                   {entries.map((n) => {

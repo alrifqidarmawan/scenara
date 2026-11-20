@@ -18,6 +18,7 @@ import {
   getFeed,
   getHighlights,
   getMembers,
+  getReplies,
   getRoomByCode,
   getRoomOverview,
   isUuid,
@@ -143,7 +144,6 @@ async function RoomContent({
         myUnit={progress[open.id]?.[member.id] ?? 0}
         memberId={member.id}
         memberName={member.nickname}
-        canEdit={canEdit}
         canEditItem={canEditMedia(access, open)}
         names={Object.fromEntries(nameById)}
         progressByMember={progress[open.id] ?? {}}
@@ -233,7 +233,6 @@ async function ModalLoader({
   myUnit,
   memberId,
   memberName,
-  canEdit,
   canEditItem,
   names,
   progressByMember,
@@ -245,14 +244,14 @@ async function ModalLoader({
   myUnit: number;
   memberId: string;
   memberName: string;
-  canEdit: boolean;
   canEditItem: boolean;
   names: Record<string, string>;
   progressByMember: Record<string, number>;
 }) {
   // Locked notes are stripped inside getFeed.
   const feed = await getFeed(media.id, myUnit);
-  const highlights = await getHighlights(feed.filter((n) => n.isUnlocked).map((n) => n.id));
+  const unlockedIds = feed.filter((n) => n.isUnlocked).map((n) => n.id);
+  const [highlights, replies] = await Promise.all([getHighlights(unlockedIds), getReplies(unlockedIds)]);
   return (
     <MediaModal
       roomCode={roomCode}
@@ -261,10 +260,10 @@ async function ModalLoader({
       shelves={shelves}
       myUnit={myUnit}
       memberName={memberName}
-      canEdit={canEdit}
       canEditItem={canEditItem}
       feed={feed}
       highlights={highlights}
+      replies={replies}
       others={Object.entries(progressByMember)
         .filter(([id]) => id !== memberId)
         .map(([id, unit]) => ({ name: names[id] ?? "Someone", unit }))}

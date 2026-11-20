@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, Highlighter, Loader2, X } from "lucide-react";
-import { addHighlight } from "@/lib/actions";
-import type { FeedNote, Highlight } from "@/lib/types";
+import { ArrowLeft, CornerDownRight, Highlighter, Loader2, X } from "lucide-react";
+import { addHighlight, addReply } from "@/lib/actions";
+import type { FeedNote, Highlight, Reply } from "@/lib/types";
 
 const TAG_LABELS: Record<FeedNote["tag"], string> = {
   note: "Note",
@@ -46,14 +46,13 @@ export function NoteDetail({
   roomCode,
   note,
   highlights,
-  canComment,
+  replies,
   onBack,
 }: {
   roomCode: string;
   note: FeedNote & { content: string };
   highlights: Highlight[];
-  /** Owner and collaborators only; viewers just read. */
-  canComment: boolean;
+  replies: Reply[];
   onBack: () => void;
 }) {
   const textRef = useRef<HTMLParagraphElement>(null);
@@ -148,9 +147,7 @@ export function NoteDetail({
         )}
       </p>
 
-      {!canComment ? (
-        <p className="text-xs text-muted">View-only: ask the owner to make you a collaborator to comment.</p>
-      ) : selection ? (
+      {selection ? (
         <form onSubmit={submit} className="space-y-2 rounded-2xl border border-brand/40 bg-brand-soft/50 p-3">
           <div className="flex items-start gap-2">
             <Highlighter className="mt-0.5 h-4 w-4 shrink-0 text-ink" aria-hidden="true" />
@@ -191,6 +188,15 @@ export function NoteDetail({
         </p>
       )}
 
+      <ReplyThread
+        roomCode={roomCode}
+        noteId={note.id}
+        highlightId={null}
+        replies={replies.filter((r) => r.highlight_id === null)}
+        label="Replies to this entry"
+        placeholder="Reply to this entry…"
+      />
+
       {highlights.length > 0 && (
         <section aria-label="Highlight comments" className="space-y-2">
           <h3 className="eyebrow">Highlights · {highlights.length}</h3>
@@ -210,10 +216,105 @@ export function NoteDetail({
                   <p className="mt-1.5 text-sm text-ink">{h.comment}</p>
                   <p className="mt-1 text-xs text-muted">{h.author_name}</p>
                 </button>
+                <div className="mt-1 pl-3">
+                  <ReplyThread
+                    roomCode={roomCode}
+                    noteId={note.id}
+                    highlightId={h.id}
+                    replies={replies.filter((r) => r.highlight_id === h.id)}
+                    label="Replies to this comment"
+                    placeholder="Reply…"
+                    compact
+                  />
+                </div>
               </li>
             ))}
           </ul>
         </section>
+      )}
+    </div>
+  );
+}
+
+/** Flat replies under an entry or a highlight comment, plus a small reply box. Anyone in the room may reply. */
+function ReplyThread({
+  roomCode,
+  noteId,
+  highlightId,
+  replies,
+  label,
+  placeholder,
+  compact = false,
+}: {
+  roomCode: string;
+  noteId: string;
+  highlightId: string | null;
+  replies: Reply[];
+  label: string;
+  placeholder: string;
+  compact?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [text, setText] = useState("");
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setPending(true);
+    setError(null);
+    const result = await addReply({ roomCode, noteId, highlightId, content: text });
+    setPending(false);
+    if (result.error) return setError(result.error);
+    setText("");
+    setOpen(false);
+  }
+
+  return (
+    <div role="group" aria-label={label} className="space-y-2">
+      {replies.length > 0 && (
+        <ul className="space-y-1.5 border-l-2 border-line pl-3">
+          {replies.map((r) => (
+            <li key={r.id} className="text-sm">
+              <span className="font-medium">{r.author_name}</span>
+              <span className="text-ink/80"> · {r.content}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {open ? (
+        <form onSubmit={submit} className="flex gap-2">
+          <input
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            maxLength={500}
+            autoFocus
+            aria-label={label}
+            placeholder={placeholder}
+            className="input"
+          />
+          <button type="submit" disabled={pending || !text.trim()} className="btn-primary shrink-0">
+            {pending && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
+            Reply
+          </button>
+          <button type="button" aria-label="Cancel reply" onClick={() => setOpen(false)} className="text-muted hover:text-ink">
+            <X className="h-4 w-4" />
+          </button>
+        </form>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className={`inline-flex items-center gap-1.5 text-muted transition hover:text-ink ${compact ? "text-xs" : "text-sm"}`}
+        >
+          <CornerDownRight className="h-3.5 w-3.5" aria-hidden="true" />
+          Reply
+        </button>
+      )}
+      {error && (
+        <p role="alert" className="text-sm text-blush-ink">
+          {error}
+        </p>
       )}
     </div>
   );

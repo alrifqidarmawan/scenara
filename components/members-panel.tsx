@@ -104,8 +104,8 @@ export function MembersPanel({
 
       {isOwner && (
         <p className="text-xs text-muted">
-          Viewers can read and move their own progress. Collaborators can also add books and shows, write entries and
-          comments, and manage shelves.
+          Everyone can read, move their own progress, comment on highlights and reply. Collaborators can also add books
+          and shows and manage shelves. Only who added a book or show, and the owner, can edit it or write its entries.
         </p>
       )}
 
