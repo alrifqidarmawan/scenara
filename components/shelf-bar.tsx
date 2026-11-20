@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { BookOpen, Loader2, Plus, Tv, X, ZoomIn, ZoomOut } from "lucide-react";
 import { createShelf } from "@/lib/actions";
+import { LinkPending } from "./link-pending";
 import type { MediaType } from "@/lib/types";
 
 export interface ShelfTab {
@@ -24,11 +25,14 @@ export function ShelfBar({
   shelves,
   currentId,
   overview,
+  canEdit,
 }: {
   roomCode: string;
   shelves: ShelfTab[];
   currentId: string;
   overview: boolean;
+  /** Owner or collaborator can create shelves. */
+  canEdit: boolean;
 }) {
   const router = useRouter();
   const base = `/room/${roomCode}`;
@@ -66,7 +70,7 @@ export function ShelfBar({
                 href={`${base}?shelf=${s.id}`}
                 scroll={false}
                 aria-current={active ? "page" : undefined}
-                className={`inline-flex min-h-10 shrink-0 items-center gap-2 rounded-full px-4 text-sm font-medium transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand ${
+                className={`relative inline-flex min-h-10 shrink-0 items-center gap-2 rounded-full px-4 text-sm font-medium transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand ${
                   active
                     ? "bg-brand text-on-brand shadow-[0_6px_16px_-8px_var(--brand)]"
                     : "border border-line bg-cream text-ink hover:border-brand/40 hover:bg-brand-soft/60"
@@ -75,10 +79,11 @@ export function ShelfBar({
                 <Icon className="h-4 w-4" aria-hidden="true" />
                 {s.name}
                 <span className={`text-xs ${active ? "opacity-80" : "text-muted"}`}>{s.count}</span>
+                <LinkPending className="rounded-full" />
               </Link>
             );
           })}
-          <button
+          {canEdit && <button
             type="button"
             onClick={() => setCreating((v) => !v)}
             aria-expanded={creating}
@@ -86,7 +91,7 @@ export function ShelfBar({
           >
             <Plus className="h-4 w-4" aria-hidden="true" />
             New shelf
-          </button>
+          </button>}
         </nav>
 
         {shelves.length > 1 && (
@@ -102,7 +107,7 @@ export function ShelfBar({
         )}
       </div>
 
-      {creating && (
+      {canEdit && creating && (
         <form onSubmit={create} className="card zoom-in space-y-3 p-4">
           <div className="flex items-center justify-between gap-3">
             <label htmlFor="new-shelf" className="font-display text-lg">

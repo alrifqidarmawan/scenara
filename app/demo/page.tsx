@@ -35,7 +35,7 @@ export default function DemoPage() {
   // Per-persona progress means "before" is always this persona's own current
   // unit — no shared counter to go stale when switching personas.
   function countUnlocked(unit: number) {
-    return DEMO_NOTES.filter((n) => isNoteUnlocked(n, unit)).length;
+    return DEMO_NOTES.filter((n) => isNoteUnlocked({ anchor_unit: n.anchor_unit }, unit)).length;
   }
 
   const [toast, setToast] = useState<string | null>(null);
@@ -103,7 +103,7 @@ export default function DemoPage() {
             <NoteCard
               key={`${note.author_name}-${note.anchor_unit}-${note.tag}`}
               note={note}
-              isUnlocked={isNoteUnlocked(note, myUnit)}
+              isUnlocked={isNoteUnlocked({ anchor_unit: note.anchor_unit }, myUnit)}
             />
           ))}
         </section>

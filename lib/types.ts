@@ -15,14 +15,20 @@ export interface Room {
   id: string;
   code: string;
   name: string;
+  /** SHA-256 of the owner key (server only, never sent to the browser). Null on rooms made before roles existed. */
+  owner_key_hash: string | null;
   created_at: string;
 }
+
+/** owner: manages members; collaborator: can add and edit; viewer: reads and moves own progress. */
+export type MemberRole = "owner" | "collaborator" | "viewer";
 
 /** room_members — nickname-based identity, no auth in v1. */
 export interface RoomMember {
   id: string;
   room_id: string;
   nickname: string;
+  role: MemberRole;
   created_at: string;
 }
 
@@ -56,6 +62,8 @@ export interface RoomMedia {
   genres: string | null;
   /** The shelf it stands on (filled in automatically for older rows). */
   shelf_id: string | null;
+  /** Who added it (null for items added before v1.5). Only they and the owner may edit the item. */
+  added_by: string | null;
   created_at: string;
 }
 
@@ -115,9 +123,15 @@ export interface FeedNote extends NoteCardData {
   isUnlocked: boolean;
 }
 
-/** The Fog of War rule, in one place. See CLAUDE.md §6A. */
-export function isNoteUnlocked(note: { anchor_unit: number }, myCurrentUnit: number): boolean {
-  return note.anchor_unit <= myCurrentUnit;
+/**
+ * The Fog of War rule, in one place. See CLAUDE.md §6A.
+ * Entries tagged `review` are the exception: they are always visible.
+ */
+export function isNoteUnlocked(
+  note: { anchor_unit: number; tag?: NoteTag },
+  myCurrentUnit: number,
+): boolean {
+  return note.tag === "review" || note.anchor_unit <= myCurrentUnit;
 }
 
 /**

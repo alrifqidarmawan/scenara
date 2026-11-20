@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Cover } from "./cover";
+import { LinkPending } from "./link-pending";
 import type { MediaType } from "@/lib/types";
 
 /**
@@ -33,6 +34,7 @@ export function ShelfBook({
       {/* Night only: a soft pool of light under this cover (see globals.css) */}
       <span aria-hidden="true" className="cover-halo" />
       <span aria-hidden="true" className="cover-glow" />
+      <LinkPending className="rounded-lg" />
       <div className="relative [perspective:1100px]">
         <div
           className={`relative aspect-[2/3] transition-transform duration-500 ease-out [transform-style:preserve-3d] ${

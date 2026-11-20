@@ -36,6 +36,8 @@ export function MediaModal({
   shelves,
   myUnit,
   memberName,
+  canEdit,
+  canEditItem,
   others,
   feed,
   highlights,
@@ -47,6 +49,10 @@ export function MediaModal({
   shelves: { id: string; name: string }[];
   myUnit: number;
   memberName: string;
+  /** Owner or collaborator. Viewers read and move their own progress only. */
+  canEdit: boolean;
+  /** May edit the item itself (pages, shelf): who added it, or the owner. */
+  canEditItem: boolean;
   others: { name: string; unit: number }[];
   feed: FeedNote[];
   highlights: Highlight[];
@@ -144,13 +150,13 @@ export function MediaModal({
             />
           </div>
 
-          {isBook && (
+          {isBook && canEditItem && (
             <div className="rounded-2xl border border-line bg-cream p-4">
               <BookPages roomCode={roomCode} mediaId={media.id} totalPages={media.total_pages} />
             </div>
           )}
 
-          {shelves.length > 1 && (
+          {canEditItem && shelves.length > 1 && (
             <label className="block">
               <span className="eyebrow">On shelf</span>
               <select
@@ -189,19 +195,28 @@ export function MediaModal({
               roomCode={roomCode}
               note={selected as FeedNote & { content: string }}
               highlights={highlights.filter((h) => h.note_id === selected.id)}
+              canComment={canEdit}
               onBack={() => setSelectedId(null)}
             />
           ) : (
             <>
               <div className="flex items-center justify-between gap-3 pr-10">
                 <h3 className="font-display text-xl">{isBook ? "Chapters & reviews" : "Episodes & reviews"}</h3>
-                <button type="button" onClick={() => setWriting((w) => !w)} className="btn-primary min-h-9 px-4">
-                  <PenLine className="h-4 w-4" aria-hidden="true" />
-                  {writing ? "Close" : "Write"}
-                </button>
+                {canEdit && (
+                  <button type="button" onClick={() => setWriting((w) => !w)} className="btn-primary min-h-9 px-4">
+                    <PenLine className="h-4 w-4" aria-hidden="true" />
+                    {writing ? "Close" : "Write"}
+                  </button>
+                )}
               </div>
 
-              {writing && (
+              {!canEdit && (
+                <p className="text-xs text-muted">
+                  You&apos;re a viewer: you can read and set your progress. Ask the owner to make you a collaborator to write.
+                </p>
+              )}
+
+              {canEdit && writing && (
                 <NoteComposer
                   roomCode={roomCode}
                   mediaId={media.id}
@@ -220,7 +235,7 @@ export function MediaModal({
               )}
 
               {entries.length === 0 ? (
-                <p className="empty">No entries yet. Be the first to write one.</p>
+                <p className="empty">{canEdit ? "No entries yet. Be the first to write one." : "No entries yet."}</p>
               ) : (
                 <ul className="space-y-2.5">
                   {entries.map((n) => {

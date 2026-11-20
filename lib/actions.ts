@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { getCurrentMember, getMedia, getMyUnit, getRoomByCode, getShelf, isUuid } from "./data";
 import { getBookDetails, getTvDetails } from "./media-api";
+import { canEditMedia, generateOwnerKey, getAccess, hashKey, keyMatches, readOwnerKey, writeOwnerKey } from "./permissions";
 import { writeMemberId } from "./session";
 import { SETUP_HINT, getSupabase, isSupabaseConfigured } from "./supabase-server";
 import { ALLOWED_COVER_HOSTS, formatUnitLabel, isNoteUnlocked, type Note } from "./types";
@@ -19,6 +20,7 @@ export interface ActionState {
 
 const DUPLICATE = "23505";
 const NOT_JOINED = "Join the room first.";
+const NOT_ALLOWED = "Only the owner and collaborators can do that.";
 
 // ---------------------------------------------------------------------------
 // Create Room (CLAUDE.md §6F)
@@ -55,13 +57,16 @@ export async function createRoom(
   // `rooms.code` is UNIQUE, so retry a few times on the (unlikely) collision.
   for (let attempt = 0; attempt < 4; attempt++) {
     const code = generateRoomCode();
+    const ownerKey = generateOwnerKey();
     const { data, error } = await supabase
       .from("rooms")
-      .insert({ code, name: parsed.data.name })
+      .insert({ code, name: parsed.data.name, owner_key_hash: hashKey(ownerKey) })
       .select("code")
       .single();
 
     if (!error && data) {
+      // The creator becomes the owner once they pick a nickname (joinRoom).
+      await writeOwnerKey(data.code, ownerKey);
       redirect(`/room/${data.code}`);
     }
     if (error?.code !== DUPLICATE) {
@@ -99,9 +104,21 @@ export async function joinRoom(
   const room = await getRoomByCode(parsed.data.room_code);
   if (!room) return { error: "This room no longer exists." };
 
-  const { data, error } = await getSupabase()
+  // Whoever holds the owner key and has no member row yet becomes the owner; everyone else is a viewer.
+  const supabase = getSupabase();
+  let role: "owner" | "viewer" = "viewer";
+  if (keyMatches(room, await readOwnerKey(room.code))) {
+    const { count } = await supabase
+      .from("room_members")
+      .select("id", { count: "exact", head: true })
+      .eq("room_id", room.id)
+      .eq("role", "owner");
+    if (!count) role = "owner";
+  }
+
+  const { data, error } = await supabase
     .from("room_members")
-    .insert({ room_id: room.id, nickname: parsed.data.nickname })
+    .insert({ room_id: room.id, nickname: parsed.data.nickname, role })
     .select("id")
     .single();
 
@@ -122,14 +139,88 @@ export async function claimMember(roomCode: string, memberId: string): Promise<A
 
   const { data } = await getSupabase()
     .from("room_members")
-    .select("id")
+    .select("id, role")
     .eq("id", memberId)
     .eq("room_id", room.id)
     .maybeSingle();
   if (!data) return { error: "Could not find that member." };
+  // The link must never hand out edit rights: only viewers can be reclaimed by name.
+  if ((data as { role: string }).role !== "viewer") {
+    return { error: "Collaborators can't be reclaimed by name. Ask the owner, or use the owner key." };
+  }
 
   await writeMemberId(room.code, memberId);
   revalidatePath(`/room/${room.code}`);
+  return { ok: true };
+}
+
+/** Another device: enter the owner key to become the owner again. */
+export async function recoverOwner(roomCode: string, key: string): Promise<ActionState> {
+  const room = await getRoomByCode(roomCode);
+  if (!room || !keyMatches(room, key)) return { error: "That owner key doesn't match this room." };
+
+  await writeOwnerKey(room.code, key);
+  const { data } = await getSupabase()
+    .from("room_members")
+    .select("id")
+    .eq("room_id", room.id)
+    .eq("role", "owner")
+    .maybeSingle();
+  // No owner member yet: the key is saved and the next "join" makes them the owner.
+  if (data) await writeMemberId(room.code, (data as { id: string }).id);
+
+  revalidatePath(`/room/${room.code}`, "layout");
+  return { ok: true };
+}
+
+/** Rooms made before roles existed have no owner: the first member to claim becomes it. */
+export async function claimOwnership(roomCode: string): Promise<ActionState> {
+  const room = await getRoomByCode(roomCode);
+  const access = room && (await getAccess(room));
+  if (!room || !access) return { error: NOT_JOINED };
+  if (room.owner_key_hash) return { error: "This room already has an owner." };
+
+  const key = generateOwnerKey();
+  const supabase = getSupabase();
+  // `is null` guard: two simultaneous claims can't both win.
+  const { data } = await supabase
+    .from("rooms")
+    .update({ owner_key_hash: hashKey(key) })
+    .eq("id", room.id)
+    .is("owner_key_hash", null)
+    .select("id");
+  if (!data?.length) return { error: "This room already has an owner." };
+
+  await supabase.from("room_members").update({ role: "owner" }).eq("id", access.member.id);
+  await writeOwnerKey(room.code, key);
+  revalidatePath(`/room/${room.code}`, "layout");
+  return { ok: true };
+}
+
+/** Owner only: make a member a collaborator (can edit) or a viewer (read only). */
+export async function setMemberRole(
+  roomCode: string,
+  memberId: string,
+  role: "collaborator" | "viewer",
+): Promise<ActionState> {
+  if (role !== "collaborator" && role !== "viewer") return { error: "Invalid role." };
+  const room = await getRoomByCode(roomCode);
+  const access = room && (await getAccess(room));
+  if (!room || !access) return { error: NOT_JOINED };
+  if (!access.isOwner) return { error: "Only the owner can change roles." };
+  if (!isUuid(memberId)) return { error: "Could not find that member." };
+
+  const { data, error } = await getSupabase()
+    .from("room_members")
+    .update({ role })
+    .eq("id", memberId)
+    .eq("room_id", room.id)
+    .neq("role", "owner") // the owner's role can't be changed here
+    .select("id");
+  if (error) return { error: error.message };
+  if (!data?.length) return { error: "Could not change that member." };
+
+  revalidatePath(`/room/${room.code}`, "layout");
   return { ok: true };
 }
 
@@ -178,7 +269,9 @@ export async function addMedia(
 
   const room = await getRoomByCode(input.room_code);
   if (!room) return { error: "This room no longer exists." };
-  if (!(await getCurrentMember(room))) return { error: NOT_JOINED };
+  const access = await getAccess(room);
+  if (!access) return { error: NOT_JOINED };
+  if (!access.canEdit) return { error: NOT_ALLOWED };
 
   const shelf = await getShelf(room, input.shelf_id);
   if (!shelf) return { error: "That shelf no longer exists." };
@@ -229,6 +322,7 @@ export async function addMedia(
     description,
     genres,
     shelf_id: shelf.id,
+    added_by: access.member.id,
   });
   if (error?.code === DUPLICATE) return { error: "That one is already in this room." };
   if (error) return { error: error.message };
@@ -287,6 +381,7 @@ export async function updateProgress(
       .select("id", { count: "exact", head: true })
       .eq("media_id", media.id)
       .neq("member_id", member.id)
+      .neq("tag", "review") // reviews are never locked, so they never "unlock"
       .gt("anchor_unit", previous)
       .lte("anchor_unit", next);
     unlocked = count ?? 0;
@@ -325,8 +420,10 @@ export async function addNote(
   const input = parsed.data;
 
   const room = await getRoomByCode(input.room_code);
-  const member = room && (await getCurrentMember(room));
-  if (!room || !member) return { error: NOT_JOINED };
+  const access = room && (await getAccess(room));
+  if (!room || !access) return { error: NOT_JOINED };
+  if (!access.canEdit) return { error: NOT_ALLOWED };
+  const member = access.member;
 
   const media = await getMedia(room, input.media_id);
   if (!media) return { error: "Media not found." };
@@ -388,8 +485,10 @@ export async function addHighlight(input: {
   const { note_id, start, end, comment } = parsed.data;
 
   const room = await getRoomByCode(parsed.data.room_code);
-  const member = room && (await getCurrentMember(room));
-  if (!room || !member) return { error: NOT_JOINED };
+  const access = room && (await getAccess(room));
+  if (!room || !access) return { error: NOT_JOINED };
+  if (!access.canEdit) return { error: NOT_ALLOWED };
+  const member = access.member;
 
   const supabase = getSupabase();
   const { data } = await supabase
@@ -447,11 +546,13 @@ export async function setBookPages(
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid page count." };
 
   const room = await getRoomByCode(parsed.data.room_code);
-  const member = room && (await getCurrentMember(room));
-  if (!room || !member) return { error: NOT_JOINED };
+  const access = room && (await getAccess(room));
+  if (!room || !access) return { error: NOT_JOINED };
+  if (!access.canEdit) return { error: NOT_ALLOWED };
 
   const media = await getMedia(room, parsed.data.media_id);
   if (!media || media.media_type !== "book") return { error: "Book not found." };
+  if (!canEditMedia(access, media)) return { error: "Only who added this book, or the owner, can change it." };
 
   const { error } = await getSupabase().rpc("set_book_pages", {
     p_media_id: media.id,
@@ -509,7 +610,9 @@ export async function addManualMedia(
 
   const room = await getRoomByCode(input.room_code);
   if (!room) return { error: "This room no longer exists." };
-  if (!(await getCurrentMember(room))) return { error: NOT_JOINED };
+  const access = await getAccess(room);
+  if (!access) return { error: NOT_JOINED };
+  if (!access.canEdit) return { error: NOT_ALLOWED };
 
   const shelf = await getShelf(room, input.shelf_id);
   if (!shelf) return { error: "That shelf no longer exists." };
@@ -554,6 +657,7 @@ export async function addManualMedia(
     genres: input.genres || null,
     description: input.description || null,
     shelf_id: shelf.id,
+    added_by: access.member.id,
   });
   if (error) return { error: error.message };
 
@@ -571,10 +675,11 @@ const shelfNameSchema = z
   .min(1, "Give the shelf a name.")
   .max(40, "Keep the name under 40 characters.");
 
-async function requireMemberInRoom(roomCode: string) {
+/** The room, when the caller is its owner or a collaborator. */
+async function requireEditor(roomCode: string) {
   const room = await getRoomByCode(roomCode);
-  const member = room && (await getCurrentMember(room));
-  return room && member ? room : null;
+  const access = room && (await getAccess(room));
+  return room && access?.canEdit ? room : null;
 }
 
 export async function createShelf(
@@ -586,8 +691,8 @@ export async function createShelf(
   if (!parsedName.success) return { error: parsedName.error.issues[0]?.message ?? "Invalid name." };
   if (kind !== "book" && kind !== "tv") return { error: "Pick books or shows." };
 
-  const room = await requireMemberInRoom(roomCode);
-  if (!room) return { error: NOT_JOINED };
+  const room = await requireEditor(roomCode);
+  if (!room) return { error: NOT_ALLOWED };
 
   const supabase = getSupabase();
   const { data: last } = await supabase
@@ -614,8 +719,8 @@ export async function renameShelf(roomCode: string, shelfId: string, name: strin
   const parsedName = shelfNameSchema.safeParse(name);
   if (!parsedName.success) return { error: parsedName.error.issues[0]?.message ?? "Invalid name." };
 
-  const room = await requireMemberInRoom(roomCode);
-  if (!room) return { error: NOT_JOINED };
+  const room = await requireEditor(roomCode);
+  if (!room) return { error: NOT_ALLOWED };
   const shelf = await getShelf(room, shelfId);
   if (!shelf) return { error: "Shelf not found." };
 
@@ -629,8 +734,8 @@ export async function renameShelf(roomCode: string, shelfId: string, name: strin
 
 /** Only an empty shelf can be removed, and a room always keeps at least one shelf. */
 export async function deleteShelf(roomCode: string, shelfId: string): Promise<ActionState> {
-  const room = await requireMemberInRoom(roomCode);
-  if (!room) return { error: NOT_JOINED };
+  const room = await requireEditor(roomCode);
+  if (!room) return { error: NOT_ALLOWED };
   const shelf = await getShelf(room, shelfId);
   if (!shelf) return { error: "Shelf not found." };
 
@@ -651,11 +756,13 @@ export async function deleteShelf(roomCode: string, shelfId: string): Promise<Ac
 
 /** Move an item to another shelf of the same kind. */
 export async function moveMedia(roomCode: string, mediaId: string, shelfId: string): Promise<ActionState> {
-  const room = await requireMemberInRoom(roomCode);
-  if (!room) return { error: NOT_JOINED };
+  const room = await getRoomByCode(roomCode);
+  const access = room && (await getAccess(room));
+  if (!room || !access?.canEdit) return { error: NOT_ALLOWED };
   const media = await getMedia(room, mediaId);
   const shelf = await getShelf(room, shelfId);
   if (!media || !shelf) return { error: "Not found." };
+  if (!canEditMedia(access, media)) return { error: "Only who added this, or the owner, can move it." };
   if (shelf.kind !== media.media_type) return { error: "That shelf is for a different kind of media." };
 
   const { error } = await getSupabase().from("room_media").update({ shelf_id: shelf.id }).eq("id", media.id);

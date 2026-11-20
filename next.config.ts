@@ -5,12 +5,10 @@ const supabaseHost = process.env.NEXT_PUBLIC_SUPABASE_URL
   : null;
 
 const nextConfig: NextConfig = {
-  output: "export",
-  experimental: {
-    agentFeedback: true,
-  },
+  cacheComponents: true,
+  partialPrefetching: true,
   images: {
-    unoptimized: true, 
+    unoptimized: true,
     remotePatterns: [
       { protocol: "https", hostname: "image.tmdb.org" },
       { protocol: "https", hostname: "covers.openlibrary.org" },

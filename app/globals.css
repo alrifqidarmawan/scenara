@@ -220,6 +220,24 @@ input[type="range"]:focus-visible {
 @keyframes orb-glow-moon {
   to { box-shadow: 0 0 14px 4px rgb(170 190 255 / 0.65), 0 0 30px 10px rgb(150 170 255 / 0.28); }
 }
+/* Loading skeletons: a quiet shimmer on the card colours, so it adapts to light and dark. */
+@keyframes skeleton-sweep {
+  0% { background-position: 120% 0; }
+  100% { background-position: -120% 0; }
+}
+@utility skeleton {
+  background-color: var(--line);
+  background-image: linear-gradient(100deg, transparent 30%, color-mix(in srgb, var(--brand-soft) 70%, transparent) 50%, transparent 70%);
+  background-size: 200% 100%;
+  background-repeat: no-repeat;
+  animation: skeleton-sweep 1.6s ease-in-out infinite;
+}
+/* Marks a link that is waiting for its page (see components/link-pending.tsx). */
+@utility pending-dim {
+  opacity: 0.55;
+  transition: opacity 0.2s ease;
+}
+
 @keyframes twinkle {
   0%, 100% { opacity: 0.35; }
   50% { opacity: 1; }
@@ -235,6 +253,13 @@ input[type="range"]:focus-visible {
 .theme-switch {
   view-transition-name: theme-toggle;
 }
+/* The new theme grows from the switch with a soft, feathered edge (no hard circle line).
+   `--reveal-r` is animated from theme-toggle.tsx; `--rx` / `--ry` are the switch centre. */
+@property --reveal-r {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
 ::view-transition-old(root),
 ::view-transition-new(root) {
   animation: none;
@@ -245,6 +270,11 @@ input[type="range"]:focus-visible {
 }
 ::view-transition-new(root) {
   z-index: 2;
+  mask-image: radial-gradient(
+    circle at var(--rx, 50%) var(--ry, 0%),
+    #000 calc(var(--reveal-r) - 140px),
+    transparent var(--reveal-r)
+  );
 }
 ::view-transition-group(theme-toggle) {
   animation: none;

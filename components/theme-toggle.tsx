@@ -5,6 +5,8 @@ import { Moon, Sun } from "lucide-react";
 const KEY = "scenara-theme";
 const DURATION_MS = 650;
 const SKY_DURATION_MS = 1100;
+const REVEAL_MS = 1000;
+const FEATHER_PX = 140; // keep in sync with the mask in globals.css
 
 const SLIDE_PX = 36; // orb travel: track width minus orb width minus both paddings
 
@@ -93,6 +95,8 @@ export function ThemeToggle() {
     const y = box.top + box.height / 2;
     const radius = Math.hypot(Math.max(x, window.innerWidth - x), Math.max(y, window.innerHeight - y));
 
+    root.style.setProperty("--rx", `${x}px`);
+    root.style.setProperty("--ry", `${y}px`);
     const transition = document.startViewTransition(apply);
     try {
       await transition.ready;
@@ -101,11 +105,12 @@ export function ThemeToggle() {
       return;
     }
     // Both start together, after the browser has captured the page, so a slow
-    // capture can never swallow the first half of the motion.
+    // capture can never swallow the first half of the motion. The reveal is a little
+    // slower than the orb and its edge is feathered, so the change reads as a soft wash.
     playOrb(button, toDark);
     root.animate(
-      { clipPath: [`circle(0px at ${x}px ${y}px)`, `circle(${radius}px at ${x}px ${y}px)`] },
-      { duration: DURATION_MS, easing: "ease-in-out", pseudoElement: "::view-transition-new(root)" },
+      { "--reveal-r": ["0px", `${radius + FEATHER_PX}px`] },
+      { duration: REVEAL_MS, easing: "cubic-bezier(0.45, 0, 0.2, 1)", pseudoElement: "::view-transition-new(root)" },
     );
   }
 
